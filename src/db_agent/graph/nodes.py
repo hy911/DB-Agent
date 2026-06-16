@@ -92,5 +92,19 @@ def _on_guard_error(state: AgentState, deps: Deps, e: GuardError) -> dict:
 
 
 def _render_context(deps: Deps) -> str:
+    """Render the domain schema for sql-gen: columns with descriptions, plus a
+    note that the permission columns are filtered automatically (so the model
+    never guesses a literal like for_bd = 'true' and never narrows them)."""
     tables = deps.layer.tables_in_domain(_DOMAIN) + deps.layer.reference_tables()
-    return "\n".join(f"{t.name}({', '.join(t.columns)})" for t in tables)
+    lines = []
+    for t in tables:
+        cols = ", ".join(f"{c.name} ({c.desc})" if c.desc else c.name for c in t.columns.values())
+        header = f"{t.name}: {cols}" if t.desc is None else f"{t.name} — {t.desc}: {cols}"
+        lines.append(header)
+    perm = ", ".join(deps.layer.access_control.fields)
+    lines.append(
+        f"\nRow-level permissions are already enforced automatically on these "
+        f"columns: {perm}. Do NOT add WHERE conditions on them — the system "
+        f"applies the correct filter for you."
+    )
+    return "\n".join(lines)

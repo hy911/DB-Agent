@@ -9,6 +9,7 @@ from db_agent.graph.nodes import (
     after_guard,
     after_route,
     answer_node,
+    assemble_context_node,
     execute_node,
     generate_sql_node,
     guard_node,
@@ -66,6 +67,17 @@ def test_after_route_branches():
     assert after_route(s) == "assemble_context"
     s["status"] = "clarify"
     assert after_route(s) == END
+
+
+def test_assemble_context_has_descriptions_and_permission_note():
+    deps = _deps()
+    ctx = assemble_context_node(initial_state("q"), deps)["context"]
+    assert "model_efficacy_info" in ctx
+    assert "药物名称" in ctx  # column description is rendered
+    # permission columns are named and the model is told not to filter them
+    assert "for_bd" in ctx
+    assert "for_model" in ctx
+    assert "do not" in ctx.lower()
 
 
 def test_generate_sql_increments_attempts():
