@@ -44,8 +44,12 @@ def _client(llm, replica):
 
 def _qr():
     return QueryResult(
-        columns=["drug_name"], rows=[{"drug_name": "X"}], rowcount=1,
-        truncated=False, sql="SELECT drug_name", elapsed_ms=1.0,
+        columns=["drug_name"],
+        rows=[{"drug_name": "X"}],
+        rowcount=1,
+        truncated=False,
+        sql="SELECT drug_name",
+        elapsed_ms=1.0,
     )
 
 
@@ -57,11 +61,13 @@ def test_health():
 
 
 def test_query_answered_includes_rows():
-    llm = _LLM({
-        "qwen-fast": ["efficacy"],
-        "qwen-code": ["SELECT drug_name FROM model_efficacy_info"],
-        "qwen-main": ["Found 1 drug."],
-    })
+    llm = _LLM(
+        {
+            "qwen-fast": ["efficacy"],
+            "qwen-code": ["SELECT drug_name FROM model_efficacy_info"],
+            "qwen-main": ["Found 1 drug."],
+        }
+    )
     with _client(llm, _Replica([_qr()])) as client:
         resp = client.post("/query", json={"question": "how many?"})
     assert resp.status_code == 200
@@ -85,10 +91,12 @@ def test_query_clarify_has_no_rows():
 
 
 def test_query_fatal_guard_error_is_200_error():
-    llm = _LLM({
-        "qwen-fast": ["efficacy"],
-        "qwen-code": ["SELECT drug_name FROM model_efficacy_info"],
-    })
+    llm = _LLM(
+        {
+            "qwen-fast": ["efficacy"],
+            "qwen-code": ["SELECT drug_name FROM model_efficacy_info"],
+        }
+    )
     replica = _Replica([GuardError("big_table_scan", "seq scan", retryable=False)])
     with _client(llm, replica) as client:
         resp = client.post("/query", json={"question": "scan it"})
