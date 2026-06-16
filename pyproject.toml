@@ -28,6 +28,10 @@ where = ["src"]
 [tool.pytest.ini_options]
 pythonpath = ["src"]
 testpaths = ["tests"]
+addopts = ["-m", "not integration"]
+markers = [
+    "integration: requires a live PostgreSQL (DBAGENT_REPLICA_DSN); deselected by default",
+]
 
 [tool.ruff]
 # Project targets 3.12+, but modules stay importable on 3.11 for local testing.
