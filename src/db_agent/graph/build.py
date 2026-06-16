@@ -1,0 +1,52 @@
+"""Build and run the agent graph.
+
+`build_graph(deps)` wires the nodes (deps bound via functools.partial) into a
+StateGraph with conditional edges for clarification and the self-correction loop.
+`run_agent` is the public entry point: build, invoke, map to AgentResult.
+"""
+
+from __future__ import annotations
+
+from functools import partial
+
+from langgraph.graph import END, START, StateGraph
+
+from db_agent.config import Settings
+from db_agent.db import ReadReplica
+from db_agent.graph import nodes
+from db_agent.graph.state import AgentResult, AgentState, Deps, initial_state, to_result
+from db_agent.llm.client import LLMClient
+from db_agent.semantic.model import SemanticLayer
+
+
+def build_graph(deps: Deps):
+    g = StateGraph(AgentState)
+    g.add_node("route", partial(nodes.route_node, deps=deps))
+    g.add_node("assemble_context", partial(nodes.assemble_context_node, deps=deps))
+    g.add_node("generate_sql", partial(nodes.generate_sql_node, deps=deps))
+    g.add_node("guard", partial(nodes.guard_node, deps=deps))
+    g.add_node("execute", partial(nodes.execute_node, deps=deps))
+    g.add_node("answer", partial(nodes.answer_node, deps=deps))
+
+    g.add_edge(START, "route")
+    g.add_conditional_edges("route", nodes.after_route, ["assemble_context", END])
+    g.add_edge("assemble_context", "generate_sql")
+    g.add_edge("generate_sql", "guard")
+    g.add_conditional_edges("guard", nodes.after_guard, ["execute", "generate_sql", END])
+    g.add_conditional_edges("execute", nodes.after_execute, ["answer", "generate_sql", END])
+    g.add_edge("answer", END)
+    return g.compile()
+
+
+def run_agent(
+    question: str,
+    *,
+    llm: LLMClient,
+    replica: ReadReplica,
+    layer: SemanticLayer,
+    settings: Settings,
+) -> AgentResult:
+    deps = Deps(llm=llm, replica=replica, layer=layer, settings=settings)
+    graph = build_graph(deps)
+    final = graph.invoke(initial_state(question))
+    return to_result(final)
