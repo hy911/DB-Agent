@@ -10,7 +10,7 @@ from __future__ import annotations
 from functools import lru_cache
 from pathlib import Path
 
-from pydantic import Field
+from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -36,11 +36,27 @@ class Settings(BaseSettings):
     max_sql_retries: int = 3
 
     # --- LiteLLM gateway / model aliases ---
-    litellm_base_url: str = "http://localhost:4000"
-    litellm_api_key: str = "sk-noauth"
-    model_route: str = Field(default="qwen-main")  # general reasoning / clarify / summarize
-    model_fast: str = Field(default="qwen-fast")  # domain routing
-    model_sql: str = Field(default="qwen-code")  # SQL generation
+    # Accept both the DBAGENT_-prefixed names and the deployed gateway's names.
+    litellm_base_url: str = Field(
+        default="http://localhost:4000",
+        validation_alias=AliasChoices("DBAGENT_LITELLM_BASE_URL", "LITELLM_BASE_URL"),
+    )
+    litellm_api_key: str = Field(
+        default="sk-noauth",
+        validation_alias=AliasChoices("DBAGENT_LITELLM_API_KEY", "LITELLM_MASTER_KEY"),
+    )
+    model_route: str = Field(  # general reasoning / clarify / answer (qwen-main)
+        default="qwen-main",
+        validation_alias=AliasChoices("DBAGENT_MODEL_ROUTE", "MODEL_MAIN"),
+    )
+    model_fast: str = Field(  # domain routing (qwen-fast)
+        default="qwen-fast",
+        validation_alias=AliasChoices("DBAGENT_MODEL_FAST", "MODEL_FAST"),
+    )
+    model_sql: str = Field(  # SQL generation (qwen-code)
+        default="qwen-code",
+        validation_alias=AliasChoices("DBAGENT_MODEL_SQL", "MODEL_CODE"),
+    )
 
 
 @lru_cache
