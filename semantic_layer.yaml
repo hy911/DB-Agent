@@ -1,0 +1,152 @@
+# ============================================================
+# 语义层骨架 (Semantic Layer) — MVP 范围
+# 来源：Django models.py 解析 + 行数统计
+# 作用：Agent 的"地图"。域路由后，把对应域的表 + 枢纽表喂进 LLM 上下文
+# 约定：库内无真实外键 (db_constraint=False)，关系全靠下方 relationships 声明
+# ============================================================
+
+meta:
+  spine_key: model_uuid          # 全库连接主键，几乎所有业务表都靠它关联 model_desc_info
+  gene_key: gene_symbol          # 组学侧连接键，关联 gene_info.symbol
+  default_expression_table: model_ccle_expression_data
+  access_control:                # 行级权限：药效/建模域必须按用户属性过滤这些字段
+    fields: [for_bd, for_model, for_control, drug_classification]
+    note: 明细表不带这些字段，需 JOIN 到对应枢纽表(model_efficacy_info)再过滤
+
+# ----------- 域划分（路由用） -----------
+domains:
+  efficacy:    {label: 药效数据, hub: model_efficacy_info, access_controlled: true}
+  modeling:    {label: 建模数据, hub: modeling_attr_info,  access_controlled: true}
+  expression:  {label: 基因表达, hub: model_desc_info}
+  mutation:    {label: 突变数据, hub: model_desc_info}
+  reference:   {label: 字典/参考, hub: null}
+
+# ----------- 表定义 -----------
+tables:
+
+  model_desc_info:
+    domain: reference
+    desc: 鼠肿瘤模型元数据，全库中心枢纽
+    pk: model_uuid
+    columns:
+      model_uuid:   {type: varchar, desc: 模型唯一标识(连接主键)}
+      model_id:     {type: varchar, desc: 模型业务编号, unique: true}
+      model_type:   {type: varchar, desc: 模型类型(配合 second_model_type 判定)}
+      second_model_type: {type: varchar, desc: 次级模型类型}
+      model_name:   {type: varchar, desc: 模型名称}
+      cancer_type:  {type: varchar, desc: 癌种}
+      cancer_subtype_short_names: {type: varchar, desc: 癌种亚型简称}
+      msi_status:   {type: varchar, desc: MSI 微卫星状态}
+      rnaseq_id:    {type: varchar, desc: 关联的 RNA-seq 编号}
+      ccle_line:    {type: varchar, desc: 对应 CCLE 细胞系}
+      is_cancer_model: {type: varchar, desc: 是否肿瘤模型}
+
+  model_rnaseq_mapping:
+    domain: reference
+    desc: 模型与 RNA-seq 样本的映射，含测序质量指标
+    columns:
+      model_uuid:   {type: varchar, desc: 关联 model_desc_info}
+      rnaseq_id:    {type: varchar, desc: RNA-seq 编号, unique: true}
+      expressed_tmb: {type: float, desc: 基于转录水平表达的肿瘤突变负荷}
+      tumor_purity: {type: float, desc: 肿瘤纯度(%)}
+      human_derived_sequenced_percentage: {type: float, desc: 测序数据人源比例(%)}
+
+  model_efficacy_info:
+    domain: efficacy
+    desc: 药效实验枢纽（一次给药实验=一行），含给药方案与核心药效指标
+    access_controlled: true
+    columns:
+      model_uuid:   {type: varchar, desc: 关联 model_desc_info}
+      efficacy_num: {type: varchar, desc: 药效实验编号(明细表连接键)}
+      group_id:     {type: varchar, desc: 实验分组(明细表连接键)}
+      drug_name:    {type: varchar, desc: 药物名称}
+      drug_dosage:  {type: varchar, desc: 给药剂量}
+      drug_route:   {type: varchar, desc: 给药途径}
+      drug_schedule: {type: varchar, desc: 给药方案}
+      drug_classification: {type: varchar, desc: 药物分类(权限过滤字段)}
+      tgi_tv:       {type: decimal, desc: 肿瘤生长抑制率(药效核心指标)}
+      tumor_volume_when_starting_treatment: {type: decimal, desc: 给药起始时瘤体积}
+      strain:       {type: varchar, desc: 鼠品系}
+      for_bd:       {type: varchar, desc: 权限：是否对BD可见}
+      for_model:    {type: boolean, desc: 权限：是否用于建模}
+      for_control:  {type: varchar, desc: 权限：是否对照}
+
+  model_efficacy_tumor_volume_growth_curve_data:
+    domain: efficacy
+    desc: 药效-肿瘤体积生长曲线(纵向时序，按动物/天)
+    access_via: model_efficacy_info   # 自身无权限字段，需 JOIN 枢纽过滤
+    join_to_hub: [model_uuid, efficacy_num, group_id]
+    columns:
+      model_uuid:   {type: varchar}
+      efficacy_num: {type: varchar}
+      group_id:     {type: varchar}
+      animal_id:    {type: varchar, desc: 动物编号}
+      days:         {type: integer, desc: 给药后天数}
+      tumor_volume: {type: decimal, desc: 单只动物瘤体积}
+      avg:          {type: decimal, desc: 组内均值}
+      sd:           {type: decimal, desc: 组内标准差}
+
+  model_efficacy_tgi_tv_data:
+    domain: efficacy
+    desc: 药效-TGI(肿瘤生长抑制率)时序，按分组/天
+    access_via: model_efficacy_info
+    join_to_hub: [model_uuid, efficacy_num, group_id]
+    columns:
+      model_uuid:   {type: varchar}
+      efficacy_num: {type: varchar}
+      group_id:     {type: varchar}
+      days:         {type: integer, desc: 给药后天数}
+      tgi:          {type: decimal, desc: 该时点 TGI 值}
+
+  model_efficacy_survival_data:
+    domain: efficacy
+    desc: 药效-生存数据(按动物)，用于生存/KM 分析
+    access_via: model_efficacy_info
+    join_to_hub: [model_uuid, efficacy_num, group_id]
+    columns:
+      model_uuid:   {type: varchar}
+      efficacy_num: {type: varchar}
+      group_id:     {type: varchar}
+      animal_id:    {type: integer, desc: 动物编号}
+      survival:     {type: decimal, desc: 生存时间}
+
+  model_ccle_expression_data:
+    domain: expression
+    desc: 基因表达(默认表，含外部CCLE数据)。长表：(模型,基因)->log2tpm
+    big_table: true                   # 千万级，必须带 model_uuid/gene_symbol 过滤，禁全表扫描
+    join_to_hub: [model_uuid]
+    columns:
+      model_uuid:   {type: varchar, desc: 关联 model_desc_info}
+      gene_symbol:  {type: varchar, desc: 关联 gene_info.symbol}
+      data_source:  {type: text, desc: 数据来源}
+      log2tpm:      {type: decimal, desc: log2(TPM) 表达值}
+
+  gene_info:
+    domain: reference
+    desc: 基因字典(当前权威表)，symbol 唯一
+    columns:
+      symbol:       {type: text, desc: 基因官方符号(连接键), unique: true}
+      GeneID:       {type: integer, desc: NCBI Entrez ID}
+      synonyms:     {type: text, desc: 同义名(分隔字符串)}
+      chromosome:   {type: integer, desc: 染色体}
+      description:  {type: text, desc: 基因描述}
+      type_of_gene: {type: text, desc: 基因类型}
+
+  gene_synonyms:
+    domain: reference
+    desc: 基因同义名映射表，供"基因名->官方symbol"确定性查找工具使用
+    columns:
+      synonym:      {type: varchar, desc: 别名/旧名/口语名}
+      gene_symbol:  {type: varchar, desc: 对应官方 symbol(关联 gene_info.symbol)}
+
+# ----------- 关系图（库内无真实外键，此处为权威声明） -----------
+relationships:
+  - {from: "*.model_uuid", to: model_desc_info.model_uuid, type: many_to_one}
+  - {from: "model_efficacy_*.{model_uuid,efficacy_num,group_id}", to: model_efficacy_info, desc: 药效明细->枢纽}
+  - {from: model_ccle_expression_data.gene_symbol, to: gene_info.symbol, type: many_to_one}
+  - {from: gene_synonyms.gene_symbol, to: gene_info.symbol, type: many_to_one}
+
+# ----------- 确定性查找工具(不交给LLM猜) -----------
+lookup_tools:
+  resolve_gene: {source: [gene_synonyms.synonym, gene_info.symbol], output: gene_info.symbol, method: 精确+pg_trgm模糊}
+  resolve_cancer_type: {source: cancer_type_short_names, output: model_desc_info.cancer_type}

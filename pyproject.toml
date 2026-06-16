@@ -1,0 +1,30 @@
+[project]
+name = "db-agent"
+version = "0.1.0"
+description = "Natural-language query & analysis agent for the mouse tumor model database (Phase 1 MVP: efficacy domain)"
+requires-python = ">=3.12"
+dependencies = [
+    "langgraph>=0.2",
+    "litellm>=1.50",
+    "sqlglot>=25",
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.32",
+    "psycopg[binary,pool]>=3.2",
+    "pyyaml>=6.0",
+    "pydantic>=2.9",
+    "pydantic-settings>=2.5",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0"]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
