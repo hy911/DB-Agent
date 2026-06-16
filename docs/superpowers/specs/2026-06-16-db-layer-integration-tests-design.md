@@ -70,7 +70,7 @@ All SQL targets the real schema from `semantic_layer.yaml`.
 | # | Verifies | SQL (run through `ReadReplica.execute`) | Expectation |
 |---|---|---|---|
 | 1 | Real SELECT + result shape | `SELECT model_uuid, drug_name, for_bd FROM model_efficacy_info WHERE for_bd = 'yes' LIMIT 5` | Returns `QueryResult`; `columns == ["model_uuid","drug_name","for_bd"]`; `rowcount >= 0`; `elapsed_ms > 0` |
-| 2 | Read-only belt-and-suspenders (writable role still blocked) | `CREATE TEMP TABLE _ro_probe (x int)` | Raises `GuardError` (read-only transaction, SQLSTATE 25006); nothing mutated |
+| 2 | Read-only belt-and-suspenders (writable role still blocked) | `UPDATE model_efficacy_info SET for_bd = for_bd WHERE false` | Raises `GuardError` `category == "read_only"` (SQLSTATE 25006); nothing mutated (and `WHERE false` matches 0 rows even if the guard ever failed) |
 | 3 | `statement_timeout` enforced | On a dedicated `ReadReplica(Settings(statement_timeout_ms=500))`: `SELECT pg_sleep(2)` | Raises `GuardError` with `category == "timeout"`, `retryable is False`; returns within ~1s |
 | 4 | EXPLAIN gate on a real plan | `SELECT gene_symbol, log2tpm FROM model_ccle_expression_data LIMIT 100` with `needs_explain=True`, `big_tables={"model_ccle_expression_data"}` | Raises `GuardError` with `category == "big_table_scan"`; the query **never executes** (EXPLAIN-gated) |
 | 5 | Error mapping on a real SQLSTATE | `SELECT no_such_col FROM model_efficacy_info LIMIT 1` | Raises `GuardError` with `retryable is True`, `category == "bad_column"` (42703) |
