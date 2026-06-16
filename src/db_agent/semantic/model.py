@@ -26,8 +26,8 @@ class Table:
     desc: str | None = None
     pk: str | None = None
     access_controlled: bool = False
-    access_via: str | None = None          # hub table name, set on permissionless detail tables
-    join_to_hub: tuple[str, ...] = ()      # join keys back to the hub (or spine)
+    access_via: str | None = None  # hub table name, set on permissionless detail tables
+    join_to_hub: tuple[str, ...] = ()  # join keys back to the hub (or spine)
     big_table: bool = False
 
     @property

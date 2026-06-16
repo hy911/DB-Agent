@@ -92,16 +92,13 @@ def _validate(layer: SemanticLayer) -> None:
 
     for table in layer.tables.values():
         if table.domain not in layer.domains:
-            errors.append(
-                f"table {table.name!r} references unknown domain {table.domain!r}"
-            )
+            errors.append(f"table {table.name!r} references unknown domain {table.domain!r}")
 
         if table.access_via is not None:
             hub = layer.tables.get(table.access_via)
             if hub is None:
                 errors.append(
-                    f"table {table.name!r} access_via points at missing table "
-                    f"{table.access_via!r}"
+                    f"table {table.name!r} access_via points at missing table {table.access_via!r}"
                 )
             else:
                 if not table.join_to_hub:
@@ -110,13 +107,10 @@ def _validate(layer: SemanticLayer) -> None:
                     )
                 for key in table.join_to_hub:
                     if not table.has_column(key):
-                        errors.append(
-                            f"detail table {table.name!r} missing join key {key!r}"
-                        )
+                        errors.append(f"detail table {table.name!r} missing join key {key!r}")
                     if not hub.has_column(key):
                         errors.append(
-                            f"hub {hub.name!r} missing join key {key!r} "
-                            f"required by {table.name!r}"
+                            f"hub {hub.name!r} missing join key {key!r} required by {table.name!r}"
                         )
 
     # NOTE: a domain whose hub table is not defined (e.g. the out-of-MVP
@@ -124,6 +118,4 @@ def _validate(layer: SemanticLayer) -> None:
     # those domains are simply not routable until their tables are added.
 
     if errors:
-        raise SemanticLayerError(
-            "semantic layer failed validation:\n  - " + "\n  - ".join(errors)
-        )
+        raise SemanticLayerError("semantic layer failed validation:\n  - " + "\n  - ".join(errors))

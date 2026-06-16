@@ -16,7 +16,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=8.0"]
+dev = ["pytest>=8.0", "ruff>=0.6"]
 
 [build-system]
 requires = ["setuptools>=68"]
@@ -28,3 +28,18 @@ where = ["src"]
 [tool.pytest.ini_options]
 pythonpath = ["src"]
 testpaths = ["tests"]
+
+[tool.ruff]
+# Project targets 3.12+, but modules stay importable on 3.11 for local testing.
+target-version = "py311"
+line-length = 100
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+# E/F: pyflakes+pycodestyle, I: import sorting, UP: pyupgrade, B: bugbear,
+# FA: flake8-future-annotations (keeps annotations PEP 563-safe).
+select = ["E", "F", "I", "UP", "B", "FA"]
+
+[tool.ruff.lint.isort]
+# Enforce the `from __future__ import annotations` header the conventions require.
+required-imports = ["from __future__ import annotations"]

@@ -119,13 +119,19 @@ logic down into `sql/` and `db/`.
 ## Commands
 
 ```bash
-python -m venv .venv && source .venv/bin/activate
-pip install -e '.[dev]'      # needs Python 3.12+
-pytest
+# Project env is a uv-managed .venv on Python 3.14 (already created). Use it for
+# all dev / debug / test. requires-python is >=3.12; runtime is 3.14.
+uv sync --extra dev     # install/refresh deps incl. pytest + ruff, updates uv.lock
+uv run pytest
+uv run ruff check src tests && uv run ruff format src tests
 
-# Local fallback on Python 3.11 (skip editable install):
-pip install sqlglot pytest pyyaml && PYTHONPATH=src pytest
+# Equivalent without uv (the venv python directly):
+.venv/Scripts/python.exe -m pytest        # Windows
 ```
+
+Note: modules still keep `from __future__ import annotations` and ruff stays on
+`target-version = "py311"` so the code remains importable on 3.11 — keep this
+unless 3.11 support is explicitly dropped.
 
 ## Gotchas
 
@@ -140,5 +146,5 @@ pip install sqlglot pytest pyyaml && PYTHONPATH=src pytest
 
 ## Git
 
-Develop on `claude/charming-einstein-j1d3mn`. Commit with clear messages; push
-with `git push -u origin <branch>`. Do not open a PR unless explicitly asked.
+Develop directly on `main`. Commit with clear messages; push with
+`git push -u origin main`. Do not open a PR unless explicitly asked.

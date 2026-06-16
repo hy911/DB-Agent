@@ -38,9 +38,9 @@ class Settings(BaseSettings):
     # --- LiteLLM gateway / model aliases ---
     litellm_base_url: str = "http://localhost:4000"
     litellm_api_key: str = "sk-noauth"
-    model_route: str = Field(default="qwen-main")   # general reasoning / clarify / summarize
-    model_fast: str = Field(default="qwen-fast")    # domain routing
-    model_sql: str = Field(default="qwen-code")     # SQL generation
+    model_route: str = Field(default="qwen-main")  # general reasoning / clarify / summarize
+    model_fast: str = Field(default="qwen-fast")  # domain routing
+    model_sql: str = Field(default="qwen-code")  # SQL generation
 
 
 @lru_cache

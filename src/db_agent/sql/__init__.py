@@ -5,6 +5,8 @@ semantic layer, and return a secured AST or raise :class:`GuardError`. All
 database access lives in :mod:`db_agent.db`.
 """
 
+from __future__ import annotations
+
 from db_agent.sql.errors import GuardError
 from db_agent.sql.permission import (
     InjectionConfig,

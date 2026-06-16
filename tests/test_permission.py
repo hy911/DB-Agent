@@ -5,8 +5,9 @@ subquery/CTE scopes, idempotency, no-op on uncontrolled tables, and that we
 never multiply rows (EXISTS, not JOIN).
 """
 
+from __future__ import annotations
+
 import sqlglot
-from sqlglot import exp
 
 from db_agent.sql.permission import InjectionConfig, inject_permissions
 
@@ -50,9 +51,7 @@ def test_hub_filter_respects_alias():
 
 
 def test_detail_table_gets_exists():
-    out = _inject(
-        "SELECT tgi FROM model_efficacy_tgi_tv_data WHERE days > 0"
-    )
+    out = _inject("SELECT tgi FROM model_efficacy_tgi_tv_data WHERE days > 0")
     assert "EXISTS" in out
     assert "model_efficacy_info AS _perm" in out
     # joins on all three keys + the access filter
@@ -69,9 +68,7 @@ def test_existing_where_is_preserved_and_anded():
 
 
 def test_or_condition_is_parenthesized():
-    out = _inject(
-        "SELECT tgi FROM model_efficacy_tgi_tv_data WHERE days = 1 OR days = 2"
-    )
+    out = _inject("SELECT tgi FROM model_efficacy_tgi_tv_data WHERE days = 1 OR days = 2")
     # original OR must be wrapped so AND-ing our predicate doesn't change meaning
     assert "(days = 1 OR days = 2)" in out
 
@@ -83,29 +80,20 @@ def test_uncontrolled_table_untouched():
 
 
 def test_detail_in_subquery_is_filtered():
-    sql = (
-        "SELECT * FROM ("
-        "  SELECT tgi FROM model_efficacy_tgi_tv_data"
-        ") sub"
-    )
+    sql = "SELECT * FROM (  SELECT tgi FROM model_efficacy_tgi_tv_data) sub"
     out = _inject(sql)
     assert "EXISTS" in out
     assert "_perm.for_bd = 'yes'" in out
 
 
 def test_detail_in_cte_is_filtered():
-    sql = (
-        "WITH t AS (SELECT tgi FROM model_efficacy_tgi_tv_data) "
-        "SELECT * FROM t"
-    )
+    sql = "WITH t AS (SELECT tgi FROM model_efficacy_tgi_tv_data) SELECT * FROM t"
     out = _inject(sql)
     assert "EXISTS" in out
 
 
 def test_idempotent():
-    ast = sqlglot.parse_one(
-        "SELECT tgi FROM model_efficacy_tgi_tv_data", dialect="postgres"
-    )
+    ast = sqlglot.parse_one("SELECT tgi FROM model_efficacy_tgi_tv_data", dialect="postgres")
     once = inject_permissions(ast, CFG)
     once_sql = once.sql(dialect="postgres")
     twice_sql = inject_permissions(once, CFG).sql(dialect="postgres")
@@ -115,9 +103,7 @@ def test_idempotent():
 
 def test_no_extra_join_added_for_detail():
     """EXISTS semi-join must not add a real JOIN (which would multiply rows)."""
-    ast = sqlglot.parse_one(
-        "SELECT tgi FROM model_efficacy_tgi_tv_data", dialect="postgres"
-    )
+    ast = sqlglot.parse_one("SELECT tgi FROM model_efficacy_tgi_tv_data", dialect="postgres")
     inject_permissions(ast, CFG)
     # the only JOINs/scopes added live inside the EXISTS subquery; the outer
     # SELECT must still have exactly one source table and no joins.
@@ -132,5 +118,5 @@ def test_hub_and_detail_both_present():
         "ON e.efficacy_num = d.efficacy_num AND e.group_id = d.group_id"
     )
     out = _inject(sql)
-    assert "e.for_bd = 'yes'" in out   # hub filtered directly
-    assert "EXISTS" in out             # detail still semi-joined (redundant but safe)
+    assert "e.for_bd = 'yes'" in out  # hub filtered directly
+    assert "EXISTS" in out  # detail still semi-joined (redundant but safe)

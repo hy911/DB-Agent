@@ -21,26 +21,33 @@ The validator works on a sqlglot AST and mutates it in place where noted
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 import sqlglot
 from sqlglot import exp
 from sqlglot.errors import ParseError
 
-from db_agent.sql.errors import GuardError
 from db_agent.semantic.model import SemanticLayer
+from db_agent.sql.errors import GuardError
 
 # Statement node types that must never appear anywhere in a read-only query.
 # Built dynamically so we stay compatible across sqlglot versions that may not
 # define every name (e.g. Grant / TruncateTable).
 _FORBIDDEN_NODE_NAMES = (
-    "Insert", "Update", "Delete", "Merge",
-    "Create", "Drop", "Alter", "TruncateTable",
-    "Grant", "Set", "SetItem", "Command",
+    "Insert",
+    "Update",
+    "Delete",
+    "Merge",
+    "Create",
+    "Drop",
+    "Alter",
+    "TruncateTable",
+    "Grant",
+    "Set",
+    "SetItem",
+    "Command",
 )
-_FORBIDDEN_NODES = tuple(
-    getattr(exp, name) for name in _FORBIDDEN_NODE_NAMES if hasattr(exp, name)
-)
+_FORBIDDEN_NODES = tuple(getattr(exp, name) for name in _FORBIDDEN_NODE_NAMES if hasattr(exp, name))
 
 _ALLOWED_ROOTS = (exp.Select, exp.Union, exp.Intersect, exp.Except)
 
@@ -48,10 +55,20 @@ _ALLOWED_ROOTS = (exp.Select, exp.Union, exp.Intersect, exp.Except)
 # databases, or otherwise escape a read-only SELECT.
 _BANNED_FUNCTIONS = frozenset(
     {
-        "pg_sleep", "pg_read_file", "pg_read_binary_file", "pg_ls_dir",
-        "lo_import", "lo_export", "dblink", "dblink_exec",
-        "query_to_xml", "copy", "pg_terminate_backend", "pg_cancel_backend",
-        "set_config", "current_setting",
+        "pg_sleep",
+        "pg_read_file",
+        "pg_read_binary_file",
+        "pg_ls_dir",
+        "lo_import",
+        "lo_export",
+        "dblink",
+        "dblink_exec",
+        "query_to_xml",
+        "copy",
+        "pg_terminate_backend",
+        "pg_cancel_backend",
+        "set_config",
+        "current_setting",
     }
 )
 

@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import pytest
 
 from db_agent.sql.errors import GuardError
@@ -79,10 +81,7 @@ def test_parse_error_is_retryable():
 
 
 def test_cte_name_not_treated_as_physical_table():
-    sql = (
-        "WITH eff AS (SELECT efficacy_num FROM model_efficacy_info) "
-        "SELECT * FROM eff"
-    )
+    sql = "WITH eff AS (SELECT efficacy_num FROM model_efficacy_info) SELECT * FROM eff"
     _checked(sql)  # must not raise: 'eff' is a CTE, not an out-of-scope table
 
 

@@ -52,11 +52,11 @@ _PERM_ALIAS = "_perm"
 
 @dataclass(frozen=True)
 class InjectionConfig:
-    hub_table: str                       # model_efficacy_info
-    access_field: str                    # for_bd
-    access_value: str                    # "yes"
+    hub_table: str  # model_efficacy_info
+    access_field: str  # for_bd
+    access_value: str  # "yes"
     detail_join_keys: dict[str, tuple[str, ...]]  # detail table -> join keys to hub
-    controlled_tables: frozenset[str]    # hub + detail tables
+    controlled_tables: frozenset[str]  # hub + detail tables
 
 
 def injection_config_for_domain(layer: SemanticLayer, domain: str) -> InjectionConfig | None:
