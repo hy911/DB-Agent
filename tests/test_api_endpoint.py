@@ -115,3 +115,21 @@ def test_query_missing_question_is_422():
     with _client(_LLM({}), _Replica([])) as client:
         resp = client.post("/query", json={})
     assert resp.status_code == 422
+
+
+def test_query_invokes_observer():
+    records = []
+    llm = _LLM(
+        {
+            "qwen-fast": ["efficacy"],
+            "qwen-code": ["SELECT drug_name FROM model_efficacy_info"],
+            "qwen-main": ["Found 1 drug."],
+        }
+    )
+    deps = Deps(llm=llm, replica=_Replica([_qr()]), layer=LAYER, settings=SETTINGS)
+    app = create_app(deps=deps, observer=records.append)
+    with TestClient(app) as client:
+        resp = client.post("/query", json={"question": "how many?"})
+    assert resp.status_code == 200
+    assert len(records) == 1
+    assert records[0].status == "answered"

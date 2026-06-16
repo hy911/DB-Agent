@@ -19,6 +19,7 @@ from db_agent.db import ReadReplica
 from db_agent.graph import run_agent
 from db_agent.graph.state import AgentResult, Deps
 from db_agent.llm import LiteLLMClient
+from db_agent.observability.observer import JsonlObserver, NullObserver, Observer
 from db_agent.semantic import load_semantic_layer
 
 router = APIRouter()
@@ -39,6 +40,7 @@ def query(req: QueryRequest, request: Request) -> QueryResponse:
             replica=deps.replica,
             layer=deps.layer,
             settings=deps.settings,
+            observer=request.app.state.observer,
         )
     except Exception as exc:  # infrastructure failure (gateway down, pool timeout)
         raise HTTPException(status_code=502, detail="agent backend error") from exc
@@ -65,7 +67,7 @@ def _to_response(result: AgentResult) -> QueryResponse:
     )
 
 
-def create_app(deps: Deps | None = None) -> FastAPI:
+def create_app(deps: Deps | None = None, observer: Observer | None = None) -> FastAPI:
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         if deps is None:
@@ -78,12 +80,18 @@ def create_app(deps: Deps | None = None) -> FastAPI:
                 layer=load_semantic_layer(s.semantic_layer_path),
                 settings=s,
             )
+            app.state.observer = (
+                JsonlObserver(s.observability_log_path)
+                if s.observability_log_path is not None
+                else NullObserver()
+            )
             try:
                 yield
             finally:
                 replica.close()
         else:
             app.state.deps = deps
+            app.state.observer = observer if observer is not None else NullObserver()
             yield
 
     app = FastAPI(title="DB-Agent", lifespan=lifespan)
