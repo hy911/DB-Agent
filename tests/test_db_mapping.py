@@ -15,6 +15,7 @@ from db_agent.db.mapping import classify_db_error
         ("42601", ("bad_syntax", True)),
         ("57014", ("timeout", False)),
         ("42501", ("forbidden", False)),
+        ("25006", ("read_only", False)),  # write in a read-only transaction
         ("08006", ("connection", False)),  # class 08 -> connection
         ("08003", ("connection", False)),
         ("99999", ("db_error", False)),  # unknown -> fatal

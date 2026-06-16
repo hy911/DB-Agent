@@ -21,6 +21,7 @@ _RETRYABLE: dict[str, str] = {
 _FATAL: dict[str, str] = {
     "57014": "timeout",  # query canceled (statement_timeout)
     "42501": "forbidden",  # insufficient privilege
+    "25006": "read_only",  # write attempted in a read-only transaction
 }
 
 
