@@ -37,17 +37,23 @@ def _run(llm, replica, question="how many models for BD?"):
 
 def _qr():
     return QueryResult(
-        columns=["drug_name"], rows=[{"drug_name": "X"}], rowcount=1,
-        truncated=False, sql="SELECT drug_name", elapsed_ms=1.0,
+        columns=["drug_name"],
+        rows=[{"drug_name": "X"}],
+        rowcount=1,
+        truncated=False,
+        sql="SELECT drug_name",
+        elapsed_ms=1.0,
     )
 
 
 def test_happy_path():
-    llm = _LLM({
-        "qwen-fast": ["efficacy"],
-        "qwen-code": ["SELECT drug_name FROM model_efficacy_info"],
-        "qwen-main": ["Found 1 drug."],
-    })
+    llm = _LLM(
+        {
+            "qwen-fast": ["efficacy"],
+            "qwen-code": ["SELECT drug_name FROM model_efficacy_info"],
+            "qwen-main": ["Found 1 drug."],
+        }
+    )
     replica = _Replica([_qr()])
     res = _run(llm, replica)
     assert res.status == "answered"
@@ -56,14 +62,16 @@ def test_happy_path():
 
 
 def test_self_correction_then_success():
-    llm = _LLM({
-        "qwen-fast": ["efficacy"],
-        "qwen-code": [
-            "SELECT bad_col FROM model_efficacy_info",
-            "SELECT drug_name FROM model_efficacy_info",
-        ],
-        "qwen-main": ["Recovered."],
-    })
+    llm = _LLM(
+        {
+            "qwen-fast": ["efficacy"],
+            "qwen-code": [
+                "SELECT bad_col FROM model_efficacy_info",
+                "SELECT drug_name FROM model_efficacy_info",
+            ],
+            "qwen-main": ["Recovered."],
+        }
+    )
     replica = _Replica([GuardError("bad_column", "no col", retryable=True), _qr()])
     res = _run(llm, replica)
     assert res.status == "answered"
@@ -72,10 +80,12 @@ def test_self_correction_then_success():
 
 
 def test_retry_budget_exhausted():
-    llm = _LLM({
-        "qwen-fast": ["efficacy"],
-        "qwen-code": ["SELECT drug_name FROM model_efficacy_info"] * 3,
-    })
+    llm = _LLM(
+        {
+            "qwen-fast": ["efficacy"],
+            "qwen-code": ["SELECT drug_name FROM model_efficacy_info"] * 3,
+        }
+    )
     replica = _Replica([GuardError("bad_column", "no col", retryable=True)] * 3)
     res = _run(llm, replica)
     assert res.status == "error"
@@ -92,10 +102,12 @@ def test_clarification_short_circuits():
 
 
 def test_fatal_guarderror_no_retry():
-    llm = _LLM({
-        "qwen-fast": ["efficacy"],
-        "qwen-code": ["SELECT drug_name FROM model_efficacy_info"],
-    })
+    llm = _LLM(
+        {
+            "qwen-fast": ["efficacy"],
+            "qwen-code": ["SELECT drug_name FROM model_efficacy_info"],
+        }
+    )
     replica = _Replica([GuardError("big_table_scan", "seq scan", retryable=False)])
     res = _run(llm, replica)
     assert res.status == "error"

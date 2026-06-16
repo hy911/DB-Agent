@@ -109,8 +109,12 @@ def test_guard_retryable_at_budget_is_fatal():
 
 def test_execute_ok_sets_result():
     qr = QueryResult(
-        columns=["n"], rows=[{"n": 1}], rowcount=1, truncated=False,
-        sql="SELECT 1", elapsed_ms=1.0,
+        columns=["n"],
+        rows=[{"n": 1}],
+        rowcount=1,
+        truncated=False,
+        sql="SELECT 1",
+        elapsed_ms=1.0,
     )
     deps = _deps(replica=_Replica([qr]))
     s = initial_state("q")
@@ -146,8 +150,12 @@ def test_after_guard_and_execute_dispatch():
 
 def test_answer_node_sets_answer():
     qr = QueryResult(
-        columns=["n"], rows=[{"n": 1}], rowcount=1, truncated=False,
-        sql="SELECT 1", elapsed_ms=1.0,
+        columns=["n"],
+        rows=[{"n": 1}],
+        rowcount=1,
+        truncated=False,
+        sql="SELECT 1",
+        elapsed_ms=1.0,
     )
     deps = _deps(llm=_LLM({"qwen-main": ["One row."]}))
     s = initial_state("q")
