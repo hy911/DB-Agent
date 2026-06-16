@@ -15,13 +15,22 @@ def _final(**over):
 
 def test_from_state_answered_has_result_summary():
     qr = QueryResult(
-        columns=["n"], rows=[{"n": 1}], rowcount=1, truncated=False,
-        sql="SELECT 1", elapsed_ms=1.0,
+        columns=["n"],
+        rows=[{"n": 1}],
+        rowcount=1,
+        truncated=False,
+        sql="SELECT 1",
+        elapsed_ms=1.0,
     )
     s = _final(
-        status="answered", domain="efficacy", context="ctx",
-        sql="SELECT 1", secured_sql="SELECT 1 LIMIT 1000", attempts=1,
-        result=qr, answer="one",
+        status="answered",
+        domain="efficacy",
+        context="ctx",
+        sql="SELECT 1",
+        secured_sql="SELECT 1 LIMIT 1000",
+        attempts=1,
+        result=qr,
+        answer="one",
     )
     r = RunRecord.from_state(s)
     assert r.status == "answered"

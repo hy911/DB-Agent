@@ -7,9 +7,13 @@ never captured.
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
+from typing import TYPE_CHECKING
 
-from db_agent.graph.state import AgentState
+if TYPE_CHECKING:
+    # Import only for type hints (annotations are strings via __future__): importing
+    # db_agent.graph at runtime would create a cycle (graph -> observability -> graph).
+    from db_agent.graph.state import AgentState
 
 
 @dataclass(frozen=True)
@@ -38,7 +42,7 @@ class RunRecord:
         else:
             rowcount, columns, truncated = None, None, None
         return cls(
-            ts=datetime.now(timezone.utc).isoformat(),
+            ts=datetime.now(UTC).isoformat(),
             question=state["question"],
             domain=state.get("domain"),
             context=state.get("context"),

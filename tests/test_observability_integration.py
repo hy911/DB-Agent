@@ -32,17 +32,23 @@ class _Replica:
 
 def _qr():
     return QueryResult(
-        columns=["drug_name"], rows=[{"drug_name": "X"}], rowcount=1,
-        truncated=False, sql="SELECT drug_name", elapsed_ms=1.0,
+        columns=["drug_name"],
+        rows=[{"drug_name": "X"}],
+        rowcount=1,
+        truncated=False,
+        sql="SELECT drug_name",
+        elapsed_ms=1.0,
     )
 
 
 def _happy_llm():
-    return _LLM({
-        "qwen-fast": ["efficacy"],
-        "qwen-code": ["SELECT drug_name FROM model_efficacy_info"],
-        "qwen-main": ["Found 1 drug."],
-    })
+    return _LLM(
+        {
+            "qwen-fast": ["efficacy"],
+            "qwen-code": ["SELECT drug_name FROM model_efficacy_info"],
+            "qwen-main": ["Found 1 drug."],
+        }
+    )
 
 
 def test_settings_log_path_defaults_none():
@@ -51,8 +57,14 @@ def test_settings_log_path_defaults_none():
 
 def test_run_agent_emits_one_record():
     records: list[RunRecord] = []
-    res = run_agent("how many?", llm=_happy_llm(), replica=_Replica([_qr()]),
-                    layer=LAYER, settings=SETTINGS, observer=records.append)
+    res = run_agent(
+        "how many?",
+        llm=_happy_llm(),
+        replica=_Replica([_qr()]),
+        layer=LAYER,
+        settings=SETTINGS,
+        observer=records.append,
+    )
     assert res.status == "answered"
     assert len(records) == 1
     assert records[0].status == "answered"
@@ -60,8 +72,9 @@ def test_run_agent_emits_one_record():
 
 
 def test_run_agent_without_observer_is_unchanged():
-    res = run_agent("how many?", llm=_happy_llm(), replica=_Replica([_qr()]),
-                    layer=LAYER, settings=SETTINGS)
+    res = run_agent(
+        "how many?", llm=_happy_llm(), replica=_Replica([_qr()]), layer=LAYER, settings=SETTINGS
+    )
     assert res.status == "answered"
 
 
@@ -69,7 +82,13 @@ def test_observer_failure_does_not_break_the_run():
     def boom(record):
         raise RuntimeError("sink down")
 
-    res = run_agent("how many?", llm=_happy_llm(), replica=_Replica([_qr()]),
-                    layer=LAYER, settings=SETTINGS, observer=boom)
+    res = run_agent(
+        "how many?",
+        llm=_happy_llm(),
+        replica=_Replica([_qr()]),
+        layer=LAYER,
+        settings=SETTINGS,
+        observer=boom,
+    )
     assert res.status == "answered"
     assert res.answer == "Found 1 drug."
