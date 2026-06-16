@@ -42,9 +42,7 @@ def generate_sql(
     context: str,
     prior_error: str | None = None,
 ) -> str:
-    text = client.complete(
-        settings.model_sql, prompts.sql_messages(question, context, prior_error)
-    )
+    text = client.complete(settings.model_sql, prompts.sql_messages(question, context, prior_error))
     return _strip_fences(text).strip()
 
 

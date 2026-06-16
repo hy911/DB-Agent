@@ -37,10 +37,7 @@ def sql_messages(
 ) -> list[dict[str, str]]:
     user = f"Schema context:\n{context}\n\nQuestion: {question}"
     if prior_error is not None:
-        user += (
-            "\n\nPrevious attempt failed with this database error; fix the SQL:\n"
-            f"{prior_error}"
-        )
+        user += f"\n\nPrevious attempt failed with this database error; fix the SQL:\n{prior_error}"
     return [
         {"role": "system", "content": _SQL_SYSTEM},
         {"role": "user", "content": user},
