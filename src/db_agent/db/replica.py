@@ -40,7 +40,12 @@ class ReadReplica:
     def _configure(self, conn: psycopg.Connection) -> None:
         # read_only must be set before any transaction begins.
         conn.read_only = True
-        conn.execute("SET statement_timeout = %s", (self._timeout_ms,))
+        # SET does not accept query parameters ($1); set_config() does and keeps
+        # the value parameterized (no string interpolation).
+        conn.execute(
+            "SELECT set_config('statement_timeout', %s, false)",
+            (str(self._timeout_ms),),
+        )
         conn.commit()
 
     def open(self) -> None:
