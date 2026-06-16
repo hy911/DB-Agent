@@ -16,6 +16,8 @@ from db_agent.db import ReadReplica
 from db_agent.graph import nodes
 from db_agent.graph.state import AgentResult, AgentState, Deps, initial_state, to_result
 from db_agent.llm.client import LLMClient
+from db_agent.observability.observer import Observer
+from db_agent.observability.record import RunRecord
 from db_agent.semantic.model import SemanticLayer
 
 
@@ -45,8 +47,14 @@ def run_agent(
     replica: ReadReplica,
     layer: SemanticLayer,
     settings: Settings,
+    observer: Observer | None = None,
 ) -> AgentResult:
     deps = Deps(llm=llm, replica=replica, layer=layer, settings=settings)
     graph = build_graph(deps)
     final = graph.invoke(initial_state(question))
+    if observer is not None:
+        try:
+            observer(RunRecord.from_state(final))
+        except Exception:
+            pass  # observability is best-effort; never break a good answer
     return to_result(final)

@@ -22,6 +22,9 @@ class Settings(BaseSettings):
     # --- semantic layer ---
     semantic_layer_path: Path = _REPO_ROOT / "semantic_layer.yaml"
 
+    # --- observability ---
+    observability_log_path: Path | None = None
+
     # --- read replica (restricted read-only role) ---
     replica_dsn: str = "postgresql://readonly@localhost:5432/tumordb"
     statement_timeout_ms: int = 15_000
