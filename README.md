@@ -7,13 +7,13 @@ and injects row-level permissions deterministically**, runs against a read-only
 replica, self-corrects on error, and answers in natural language while showing
 the SQL it ran.
 
-## Status — Phase 1 MVP (efficacy domain) — complete
+## Status — Phase 1 MVP complete; Phase 2 in progress (multi-domain routing)
 
 The end-to-end chain is built, fully unit-tested offline, and verified against a
 live LiteLLM gateway + read replica (HTTP layer included):
 
 ```
-intent route / clarify → context assembly (yaml) → SQL gen (qwen-code)
+domain route / clarify (efficacy | expression) → context assembly (yaml) → SQL gen (qwen-code)
   → sqlglot validate + permission inject → read-replica exec → self-correct (≤3)
   → NL answer + generated SQL          (exposed via POST /query)
 ```
