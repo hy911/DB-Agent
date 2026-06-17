@@ -77,3 +77,15 @@ class SemanticLayer:
     def detail_tables_of(self, hub: str) -> list[Table]:
         """Detail tables whose ``access_via`` points at ``hub``."""
         return [t for t in self.tables.values() if t.access_via == hub]
+
+    def routable_domains(self) -> list[Domain]:
+        """Domains the router may pick: non-reference with at least one defined table.
+
+        Forward-declared domains (a hub named but no tables yet) are excluded, so
+        adding their tables to the YAML later makes them routable with no code change.
+        """
+        return [
+            d
+            for d in self.domains.values()
+            if d.name != "reference" and self.tables_in_domain(d.name)
+        ]
