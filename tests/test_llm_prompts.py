@@ -1,13 +1,17 @@
 from __future__ import annotations
 
+from db_agent.config import Settings
 from db_agent.llm.prompts import answer_messages, route_messages, sql_messages
+from db_agent.semantic import load_semantic_layer
+
+DOMAINS = load_semantic_layer(Settings(_env_file=None).semantic_layer_path).routable_domains()
 
 
-def test_route_messages_mention_efficacy_and_clarify():
-    msgs = route_messages("how many models?")
+def test_route_messages_lists_domains_and_clarify():
+    msgs = route_messages("how many models?", DOMAINS)
     assert msgs[0]["role"] == "system"
     text = " ".join(m["content"] for m in msgs).lower()
-    assert "efficacy" in text
+    assert "efficacy" in text and "expression" in text
     assert "clarify" in text
     assert "how many models?" in msgs[-1]["content"]
 

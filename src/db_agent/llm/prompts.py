@@ -2,14 +2,10 @@
 
 from __future__ import annotations
 
-_ROUTE_SYSTEM = (
-    "You are a domain router for a mouse tumor-model database agent. The only "
-    "in-scope domain is 'efficacy' (drug efficacy studies: tumor volume, TGI, "
-    "survival). If the question is answerable from efficacy data, reply with "
-    "exactly the word 'efficacy'. Otherwise reply 'clarify: <one short question "
-    "asking the user to clarify, or stating it is out of scope>'. Reply with "
-    "nothing else."
-)
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from db_agent.semantic.model import Domain
 
 _SQL_SYSTEM = (
     "You write exactly one read-only PostgreSQL SELECT for the efficacy domain. "
@@ -25,9 +21,19 @@ _ANSWER_SYSTEM = (
 )
 
 
-def route_messages(question: str) -> list[dict[str, str]]:
+def route_messages(question: str, domains: list[Domain]) -> list[dict[str, str]]:
+    listing = "\n".join(f"- {d.name}: {d.label}" for d in domains)
+    system = (
+        "You are a domain router for a mouse tumor-model database agent. The "
+        "in-scope domains are:\n"
+        f"{listing}\n\n"
+        "If the question is answerable from exactly one of these domains, reply "
+        "with that domain's name verbatim (e.g. 'efficacy'). Otherwise reply "
+        "'clarify: <one short question asking the user to clarify, or stating it "
+        "is out of scope>'. Reply with nothing else."
+    )
     return [
-        {"role": "system", "content": _ROUTE_SYSTEM},
+        {"role": "system", "content": system},
         {"role": "user", "content": question},
     ]
 

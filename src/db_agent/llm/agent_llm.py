@@ -8,13 +8,17 @@ client.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 from db_agent.config import Settings
 from db_agent.db import QueryResult
 from db_agent.llm import prompts
 from db_agent.llm.client import LLMClient
 
-_CLARIFY_FALLBACK = "Could you clarify what efficacy data you're asking about?"
+if TYPE_CHECKING:
+    from db_agent.semantic.model import Domain
+
+_CLARIFY_FALLBACK = "Could you clarify or rephrase your question?"
 
 
 @dataclass(frozen=True)
@@ -23,15 +27,19 @@ class RouteResult:
     clarification: str | None = None
 
 
-def route(client: LLMClient, settings: Settings, question: str) -> RouteResult:
-    text = client.complete(settings.model_fast, prompts.route_messages(question)).strip()
+def route(
+    client: LLMClient, settings: Settings, question: str, domains: list[Domain]
+) -> RouteResult:
+    valid = {d.name for d in domains}
+    text = client.complete(settings.model_fast, prompts.route_messages(question, domains)).strip()
     low = text.lower()
-    if low.startswith("efficacy"):
-        return RouteResult(domain="efficacy")
     if low.startswith("clarify"):
         q = text.split(":", 1)[1].strip() if ":" in text else _CLARIFY_FALLBACK
         return RouteResult(clarification=q or _CLARIFY_FALLBACK)
-    # Anything unexpected: never guess a domain — ask the user.
+    for name in valid:
+        if low.startswith(name.lower()):
+            return RouteResult(domain=name)
+    # Unexpected output or an out-of-scope domain name: never guess — ask.
     return RouteResult(clarification=_CLARIFY_FALLBACK)
 
 
