@@ -112,3 +112,29 @@ def test_fatal_guarderror_no_retry():
     res = _run(llm, replica)
     assert res.status == "error"
     assert replica.calls == 1
+
+
+def test_expression_end_to_end_no_permission_injection():
+    llm = _LLM(
+        {
+            "qwen-fast": ["expression"],
+            "qwen-code": [
+                "SELECT log2tpm FROM model_ccle_expression_data "
+                "WHERE gene_symbol = 'TP53' AND model_uuid = 'm1'"
+            ],
+            "qwen-main": ["log2tpm for TP53 in m1 is 5.2."],
+        }
+    )
+    qr = QueryResult(
+        columns=["log2tpm"],
+        rows=[{"log2tpm": 5.2}],
+        rowcount=1,
+        truncated=False,
+        sql="SELECT log2tpm",
+        elapsed_ms=1.0,
+    )
+    res = _run(llm, _Replica([qr]), question="TP53 expression in m1?")
+    assert res.status == "answered"
+    assert res.answer == "log2tpm for TP53 in m1 is 5.2."
+    assert "for_bd" not in (res.sql or "").lower()  # expression: not access-controlled
+    assert "model_ccle_expression_data" in res.sql.lower()
