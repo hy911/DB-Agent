@@ -16,13 +16,11 @@ from db_agent.llm import route as llm_route
 from db_agent.sql.errors import GuardError
 from db_agent.sql.secure import secure_query
 
-_DOMAIN = "efficacy"
-
 
 def route_node(state: AgentState, deps: Deps) -> dict:
-    res = llm_route(deps.llm, deps.settings, state["question"])
-    if res.domain == _DOMAIN:
-        return {"domain": _DOMAIN}
+    res = llm_route(deps.llm, deps.settings, state["question"], deps.layer.routable_domains())
+    if res.domain is not None:
+        return {"domain": res.domain}
     return {"clarification": res.clarification, "status": "clarify"}
 
 
@@ -31,7 +29,7 @@ def after_route(state: AgentState) -> str:
 
 
 def assemble_context_node(state: AgentState, deps: Deps) -> dict:
-    return {"context": _render_context(deps)}
+    return {"context": _render_context(deps, state["domain"])}
 
 
 def generate_sql_node(state: AgentState, deps: Deps) -> dict:
@@ -43,7 +41,7 @@ def generate_sql_node(state: AgentState, deps: Deps) -> dict:
 
 def guard_node(state: AgentState, deps: Deps) -> dict:
     try:
-        secured = secure_query(state["sql"], deps.layer, _DOMAIN)
+        secured = secure_query(state["sql"], deps.layer, state["domain"])
     except GuardError as e:
         return _on_guard_error(state, deps, e)
     return {
@@ -91,20 +89,22 @@ def _on_guard_error(state: AgentState, deps: Deps, e: GuardError) -> dict:
     return {"outcome": "retry", "last_error": msg}
 
 
-def _render_context(deps: Deps) -> str:
-    """Render the domain schema for sql-gen: columns with descriptions, plus a
-    note that the permission columns are filtered automatically (so the model
-    never guesses a literal like for_bd = 'true' and never narrows them)."""
-    tables = deps.layer.tables_in_domain(_DOMAIN) + deps.layer.reference_tables()
+def _render_context(deps: Deps, domain: str) -> str:
+    """Render the domain's schema for sql-gen: columns with descriptions, plus —
+    only for an access-controlled domain — a note that the permission columns are
+    filtered automatically (so the model never filters or guesses them)."""
+    tables = deps.layer.tables_in_domain(domain) + deps.layer.reference_tables()
     lines = []
     for t in tables:
         cols = ", ".join(f"{c.name} ({c.desc})" if c.desc else c.name for c in t.columns.values())
         header = f"{t.name}: {cols}" if t.desc is None else f"{t.name} — {t.desc}: {cols}"
         lines.append(header)
-    perm = ", ".join(deps.layer.access_control.fields)
-    lines.append(
-        f"\nRow-level permissions are already enforced automatically on these "
-        f"columns: {perm}. Do NOT add WHERE conditions on them — the system "
-        f"applies the correct filter for you."
-    )
+    dom = deps.layer.get_domain(domain)
+    if dom is not None and dom.access_controlled:
+        perm = ", ".join(deps.layer.access_control.fields)
+        lines.append(
+            f"\nRow-level permissions are already enforced automatically on these "
+            f"columns: {perm}. Do NOT add WHERE conditions on them — the system "
+            f"applies the correct filter for you."
+        )
     return "\n".join(lines)

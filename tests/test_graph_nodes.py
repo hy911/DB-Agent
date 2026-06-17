@@ -69,15 +69,30 @@ def test_after_route_branches():
     assert after_route(s) == END
 
 
-def test_assemble_context_has_descriptions_and_permission_note():
+def test_assemble_context_efficacy_has_permission_note():
     deps = _deps()
-    ctx = assemble_context_node(initial_state("q"), deps)["context"]
+    s = initial_state("q")
+    s["domain"] = "efficacy"
+    ctx = assemble_context_node(s, deps)["context"]
     assert "model_efficacy_info" in ctx
-    assert "药物名称" in ctx  # column description is rendered
-    # permission columns are named and the model is told not to filter them
+    assert "药物名称" in ctx  # column description rendered
     assert "for_bd" in ctx
-    assert "for_model" in ctx
-    assert "do not" in ctx.lower()
+    assert "do not" in ctx.lower()  # permission note present (access-controlled)
+
+
+def test_assemble_context_expression_omits_permission_note():
+    deps = _deps()
+    s = initial_state("q")
+    s["domain"] = "expression"
+    ctx = assemble_context_node(s, deps)["context"]
+    assert "model_ccle_expression_data" in ctx
+    assert "do not" not in ctx.lower()  # expression is not access-controlled
+
+
+def test_route_expression_sets_domain():
+    deps = _deps(llm=_LLM({"qwen-fast": ["expression"]}))
+    out = route_node(initial_state("TP53 expression?"), deps)
+    assert out["domain"] == "expression"
 
 
 def test_generate_sql_increments_attempts():
@@ -89,9 +104,10 @@ def test_generate_sql_increments_attempts():
     assert out["attempts"] == 1
 
 
-def test_guard_ok_sets_secured_sql():
+def test_guard_ok_efficacy_injects_permission():
     deps = _deps()
     s = initial_state("q")
+    s["domain"] = "efficacy"
     s["sql"] = "SELECT drug_name FROM model_efficacy_info"
     s["attempts"] = 1
     out = guard_node(s, deps)
@@ -99,9 +115,24 @@ def test_guard_ok_sets_secured_sql():
     assert "for_bd" in out["secured_sql"].lower()
 
 
+def test_guard_ok_expression_no_permission():
+    deps = _deps()
+    s = initial_state("q")
+    s["domain"] = "expression"
+    s["sql"] = (
+        "SELECT log2tpm FROM model_ccle_expression_data "
+        "WHERE gene_symbol = 'TP53' AND model_uuid = 'm1'"
+    )
+    s["attempts"] = 1
+    out = guard_node(s, deps)
+    assert out["outcome"] == "ok"
+    assert "for_bd" not in out["secured_sql"].lower()
+
+
 def test_guard_retryable_under_budget():
     deps = _deps()
     s = initial_state("q")
+    s["domain"] = "efficacy"
     s["sql"] = "SELECT (("  # parse error -> retryable GuardError
     s["attempts"] = 1
     out = guard_node(s, deps)
@@ -112,6 +143,7 @@ def test_guard_retryable_under_budget():
 def test_guard_retryable_at_budget_is_fatal():
     deps = _deps()
     s = initial_state("q")
+    s["domain"] = "efficacy"
     s["sql"] = "SELECT (("
     s["attempts"] = 3  # == max_sql_retries
     out = guard_node(s, deps)
