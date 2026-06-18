@@ -120,3 +120,21 @@ def test_hub_and_detail_both_present():
     out = _inject(sql)
     assert "e.for_bd = 'yes'" in out  # hub filtered directly
     assert "EXISTS" in out  # detail still semi-joined (redundant but safe)
+
+
+def test_injection_config_for_modeling_built_from_layer():
+    from db_agent.config import Settings
+    from db_agent.semantic import load_semantic_layer
+    from db_agent.sql.permission import injection_config_for_domain
+
+    layer = load_semantic_layer(Settings(_env_file=None).semantic_layer_path)
+    cfg = injection_config_for_domain(layer, "modeling")
+    assert cfg is not None
+    assert cfg.hub_table == "modeling_attr_info"
+    assert cfg.access_field == "for_bd"
+    assert cfg.access_value == "yes"
+    keys = ("model_uuid", "model_no", "group_id")
+    assert cfg.detail_join_keys["modeling_tumor_volume_growth_curve_data"] == keys
+    assert cfg.detail_join_keys["modeling_body_weight_growth_curve_data"] == keys
+    assert cfg.detail_join_keys["modeling_survival_data"] == keys
+    assert "modeling_attr_info" in cfg.controlled_tables

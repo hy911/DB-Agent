@@ -44,3 +44,27 @@ def test_mutation_big_table_with_gene_filter_skips_explain():
         "mutation",
     )
     assert secured.needs_explain is False
+
+
+def test_secure_modeling_hub_injects_for_bd():
+    out = secure_query("SELECT model_no FROM modeling_attr_info", LAYER, "modeling")
+    low = out.sql.lower()
+    assert "for_bd = 'yes'" in low
+    assert out.needs_explain is False  # not a big table
+
+
+def test_secure_modeling_detail_injects_exists_semijoin():
+    out = secure_query(
+        "SELECT tumor_volume FROM modeling_tumor_volume_growth_curve_data",
+        LAYER,
+        "modeling",
+    )
+    s = out.sql
+    assert "EXISTS" in s.upper()
+    assert "modeling_attr_info AS _perm" in s
+    assert "_perm.model_uuid = modeling_tumor_volume_growth_curve_data.model_uuid" in s
+    assert "_perm.model_no = modeling_tumor_volume_growth_curve_data.model_no" in s
+    assert "_perm.group_id = modeling_tumor_volume_growth_curve_data.group_id" in s
+    assert "_perm.for_bd = 'yes'" in s
+    # the detail table must NOT get a bare for_bd filter on itself
+    assert "modeling_tumor_volume_growth_curve_data.for_bd" not in s
