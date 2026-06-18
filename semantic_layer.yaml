@@ -153,6 +153,71 @@ tables:
       level_associated_cancer_types: {type: varchar, desc: 等级关联癌种}
       citations:       {type: integer, desc: 文献引用数}
 
+  modeling_attr_info:
+    domain: modeling
+    desc: 建模实验枢纽（一个建模分组=一行），含建模属性与权限字段
+    access_controlled: true
+    columns:
+      model_uuid:   {type: varchar, desc: 关联 model_desc_info}
+      model_no:     {type: varchar, desc: 建模编号(明细表连接键，相当于 efficacy 的 efficacy_num)}
+      group_id:     {type: varchar, desc: 实验分组(明细表连接键)}
+      amount:       {type: varchar, desc: 接种量}
+      route:        {type: varchar, desc: 接种途径}
+      strain:       {type: varchar, desc: 鼠品系}
+      sex:          {type: varchar, desc: 性别}
+      vendor:       {type: varchar, desc: 供应商}
+      passage:      {type: varchar, desc: 代次}
+      days_when_tumor_volume_100mm3:  {type: integer, desc: 瘤体积达 100mm³ 的天数}
+      days_when_tumor_volume_500mm3:  {type: integer, desc: 瘤体积达 500mm³ 的天数}
+      days_when_tumor_volume_1000mm3: {type: float, desc: 瘤体积达 1000mm³ 的天数}
+      quality:      {type: varchar, desc: 数据质量}
+      for_bd:       {type: varchar, desc: 权限：是否对 BD 可见}
+      for_control:  {type: varchar, desc: 权限：是否对照}
+      for_model:    {type: boolean, desc: 权限：是否用于建模}
+
+  modeling_tumor_volume_growth_curve_data:
+    domain: modeling
+    desc: 建模-肿瘤体积生长曲线(纵向时序，按动物/天)
+    access_via: modeling_attr_info
+    join_to_hub: [model_uuid, model_no, group_id]
+    columns:
+      model_uuid:   {type: varchar}
+      model_no:     {type: varchar}
+      group_id:     {type: varchar}
+      days:         {type: integer, desc: 建模后天数}
+      date:         {type: timestamp, desc: 测量日期}
+      body_part:    {type: varchar, desc: 部位}
+      tumor_volume: {type: float, desc: 单只动物瘤体积}
+      avg:          {type: float, desc: 组内均值}
+      sd:           {type: float, desc: 组内标准差}
+
+  modeling_body_weight_growth_curve_data:
+    domain: modeling
+    desc: 建模-体重生长曲线(纵向时序，按动物/天)
+    access_via: modeling_attr_info
+    join_to_hub: [model_uuid, model_no, group_id]
+    columns:
+      model_uuid:   {type: varchar}
+      model_no:     {type: varchar}
+      group_id:     {type: varchar}
+      days:         {type: integer, desc: 建模后天数}
+      date:         {type: timestamp, desc: 测量日期}
+      body_weight:  {type: float, desc: 单只动物体重}
+      avg:          {type: float, desc: 组内均值}
+      sd:           {type: float, desc: 组内标准差}
+
+  modeling_survival_data:
+    domain: modeling
+    desc: 建模-生存数据(按动物)，用于生存/KM 分析
+    access_via: modeling_attr_info
+    join_to_hub: [model_uuid, model_no, group_id]
+    columns:
+      model_uuid:   {type: varchar}
+      model_no:     {type: varchar}
+      group_id:     {type: varchar}
+      animal_id:    {type: text, desc: 动物编号(库内为字符串)}
+      survival:     {type: text, desc: 生存时间(库内为字符串)}
+
   gene_info:
     domain: reference
     desc: 基因字典(当前权威表)，symbol 唯一
@@ -175,6 +240,7 @@ tables:
 relationships:
   - {from: "*.model_uuid", to: model_desc_info.model_uuid, type: many_to_one}
   - {from: "model_efficacy_*.{model_uuid,efficacy_num,group_id}", to: model_efficacy_info, desc: 药效明细->枢纽}
+  - {from: "modeling_*.{model_uuid,model_no,group_id}", to: modeling_attr_info, desc: 建模明细->枢纽}
   - {from: model_ccle_expression_data.gene_symbol, to: gene_info.Symbol, type: many_to_one}
   - {from: model_ccle_mutation_data.gene_symbol, to: gene_info.Symbol, type: many_to_one}
   - {from: oncokb.gene, to: gene_info.Symbol, type: many_to_one}

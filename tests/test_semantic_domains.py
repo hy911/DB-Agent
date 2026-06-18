@@ -6,15 +6,14 @@ from db_agent.semantic import load_semantic_layer
 LAYER = load_semantic_layer(Settings(_env_file=None).semantic_layer_path)
 
 
-def test_routable_domains_are_efficacy_expression_mutation():
+def test_routable_domains_are_all_four():
     names = {d.name for d in LAYER.routable_domains()}
-    assert names == {"efficacy", "expression", "mutation"}
+    assert names == {"efficacy", "expression", "mutation", "modeling"}
 
 
 def test_routable_excludes_reference_and_undefined_domains():
     names = {d.name for d in LAYER.routable_domains()}
     assert "reference" not in names  # dictionary domain, never routed
-    assert "modeling" not in names  # forward-declared, no tables yet
 
 
 def test_gene_info_symbol_column_matches_db_casing():
@@ -49,3 +48,27 @@ def test_oncokb_in_mutation_domain_not_access_controlled():
     assert t.access_controlled is False
     assert t.has_column("gene")
     assert t.has_column("mutant")
+
+
+def test_modeling_access_controlled_with_hub():
+    dom = LAYER.get_domain("modeling")
+    assert dom is not None
+    assert dom.access_controlled is True
+    assert dom.hub == "modeling_attr_info"
+
+
+def test_modeling_not_gene_bearing():
+    assert LAYER.is_gene_bearing("modeling") is False
+
+
+def test_modeling_detail_tables_join_to_hub():
+    details = LAYER.detail_tables_of("modeling_attr_info")
+    names = {t.name for t in details}
+    assert names == {
+        "modeling_tumor_volume_growth_curve_data",
+        "modeling_body_weight_growth_curve_data",
+        "modeling_survival_data",
+    }
+    for t in details:
+        assert t.access_via == "modeling_attr_info"
+        assert t.join_to_hub == ("model_uuid", "model_no", "group_id")
