@@ -22,3 +22,8 @@ def test_gene_info_symbol_column_matches_db_casing():
     t = LAYER.get_table("gene_info")
     assert t.has_column("Symbol")  # matches the real DB column
     assert not t.has_column("symbol")
+
+
+def test_is_gene_bearing():
+    assert LAYER.is_gene_bearing("expression") is True  # has a gene_symbol column
+    assert LAYER.is_gene_bearing("efficacy") is False

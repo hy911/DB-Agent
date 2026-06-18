@@ -89,3 +89,7 @@ class SemanticLayer:
             for d in self.domains.values()
             if d.name != "reference" and self.tables_in_domain(d.name)
         ]
+
+    def is_gene_bearing(self, domain: str) -> bool:
+        """True if any table in the domain has the gene_key (gene_symbol) column."""
+        return any(t.has_column(self.gene_key) for t in self.tables_in_domain(domain))
