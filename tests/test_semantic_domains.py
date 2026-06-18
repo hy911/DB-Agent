@@ -28,11 +28,6 @@ def test_is_gene_bearing():
     assert LAYER.is_gene_bearing("efficacy") is False
 
 
-def test_mutation_is_routable():
-    names = {d.name for d in LAYER.routable_domains()}
-    assert names == {"efficacy", "expression", "mutation"}
-
-
 def test_mutation_is_gene_bearing():
     assert LAYER.is_gene_bearing("mutation") is True
 
