@@ -60,6 +60,20 @@ def test_generate_sql_strips_code_fences():
     assert c.last_model == "qwen-code"
 
 
+def test_extract_genes_parses_comma_list():
+    from db_agent.llm.agent_llm import extract_genes
+
+    c = _ScriptedClient("p53, EGFR")
+    assert extract_genes(c, SETTINGS, "p53 and EGFR?") == ["p53", "EGFR"]
+    assert c.last_model == "qwen-fast"
+
+
+def test_extract_genes_none_returns_empty():
+    from db_agent.llm.agent_llm import extract_genes
+
+    assert extract_genes(_ScriptedClient("NONE"), SETTINGS, "how many models?") == []
+
+
 def test_answer_uses_model_route_and_passes_through():
     c = _ScriptedClient("There are 3 models.")
     res = QueryResult(

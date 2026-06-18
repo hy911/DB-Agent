@@ -40,3 +40,12 @@ def test_answer_messages_include_sql_and_preview():
     joined = " ".join(m["content"] for m in msgs)
     assert "SELECT 1" in joined
     assert "(0 rows)" in joined
+
+
+def test_extract_genes_messages_include_question():
+    from db_agent.llm.prompts import extract_genes_messages
+
+    msgs = extract_genes_messages("expression of p53?")
+    assert msgs[0]["role"] == "system"
+    assert "gene" in " ".join(m["content"] for m in msgs).lower()
+    assert "expression of p53?" in msgs[-1]["content"]

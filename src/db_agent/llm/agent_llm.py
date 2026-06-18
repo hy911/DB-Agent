@@ -43,6 +43,13 @@ def route(
     return RouteResult(clarification=_CLARIFY_FALLBACK)
 
 
+def extract_genes(client: LLMClient, settings: Settings, question: str) -> list[str]:
+    text = client.complete(settings.model_fast, prompts.extract_genes_messages(question)).strip()
+    if not text or text.strip().upper() == "NONE":
+        return []
+    return [g.strip() for g in text.split(",") if g.strip()]
+
+
 def generate_sql(
     client: LLMClient,
     settings: Settings,

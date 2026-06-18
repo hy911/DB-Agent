@@ -50,6 +50,19 @@ def sql_messages(
     ]
 
 
+def extract_genes_messages(question: str) -> list[dict[str, str]]:
+    system = (
+        "You extract gene names or symbols mentioned in the user's question for a "
+        "gene-expression database. List each gene mention exactly as the user "
+        "wrote it, comma-separated. If no gene is mentioned, reply with the single "
+        "word NONE. Reply with nothing else."
+    )
+    return [
+        {"role": "system", "content": system},
+        {"role": "user", "content": question},
+    ]
+
+
 def answer_messages(question: str, sql: str, rows_preview: str) -> list[dict[str, str]]:
     user = f"Question: {question}\n\nSQL run:\n{sql}\n\nResult rows:\n{rows_preview}"
     return [
