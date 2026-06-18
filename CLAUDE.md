@@ -78,9 +78,13 @@ Done:
   candidates).
 - **observability**: optional per-run JSONL log (`DBAGENT_OBSERVABILITY_LOG_PATH`).
 
-In progress: wiring `resolve_gene` into the question flow — Plan B at
-`docs/superpowers/plans/2026-06-17-gene-resolution-wiring.md` (written, not yet
-executed). Design specs + plans live under `docs/superpowers/`.
+`resolve_gene` is now **wired into the question flow** (Plan B, executed
+2026-06-18, live-verified): a gene-bearing domain (`is_gene_bearing`) routes
+`route → extract_genes (LLM lists mentions) → resolve_genes (deterministic) →
+clarify | assemble_context`. All-resolved injects a canonical-symbol map into the
+sql-gen context; any ambiguous/unknown short-circuits to clarify. The resolver is
+injected via `Deps.resolve_gene` (default = real `db.resolve_gene`) so the graph
+stays offline-testable. Design specs + plans live under `docs/superpowers/`.
 
 Still deferred (do not build until asked): the modeling/mutation domains (await
 their table defs), pgvector example retrieval, stats sandbox, DuckDB, LLM gateway
