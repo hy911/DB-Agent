@@ -69,10 +69,15 @@ domain route / clarify → context assembly (yaml) → SQL gen (qwen-code)
 Done:
 - **All layers built**: semantic / sql / db / llm / graph / api / observability.
 - **Multi-domain routing is data-driven** (`SemanticLayer.routable_domains()`):
-  routes `{efficacy, expression}` today; modeling/mutation auto-join once their
+  routes `{efficacy, expression, mutation}` today; `modeling` auto-joins once its
   tables are added to `semantic_layer.yaml` (no code change).
 - **expression** domain (gene expression; NOT access-controlled → no permission
   injection; the big-table EXPLAIN gate applies to `model_ccle_expression_data`).
+- **mutation** domain (somatic mutations; NOT access-controlled; added
+  2026-06-18, live-verified). `model_ccle_mutation_data` (big table, ~5.5M rows,
+  gene-bearing) + `oncokb` clinical annotation (domain=mutation → fed only for
+  mutation questions). Added as a **pure `semantic_layer.yaml` change** (zero
+  source changes) — proof the data-driven extension path works.
 - **resolve_gene** tool (`db/gene_resolver.py`): deterministic gene-name →
   canonical symbol (case-sensitive exact + pg_trgm fuzzy as clarify-only
   candidates).
@@ -86,9 +91,11 @@ sql-gen context; any ambiguous/unknown short-circuits to clarify. The resolver i
 injected via `Deps.resolve_gene` (default = real `db.resolve_gene`) so the graph
 stays offline-testable. Design specs + plans live under `docs/superpowers/`.
 
-Still deferred (do not build until asked): the modeling/mutation domains (await
-their table defs), pgvector example retrieval, stats sandbox, DuckDB, LLM gateway
-retry/backoff.
+Still deferred (do not build until asked): the **modeling** domain (access-
+controlled, large efficacy-parallel detail-table set — its own spec/plan when
+asked), pgvector example retrieval, stats sandbox, DuckDB, LLM gateway
+retry/backoff (a real gap — a live answer-node call hit a transient 504 during
+mutation e2e).
 
 ### Permission policy (Phase 1, confirmed with the user)
 
