@@ -121,6 +121,38 @@ tables:
       data_source:  {type: text, desc: 数据来源}
       log2tpm:      {type: decimal, desc: log2(TPM) 表达值}
 
+  model_ccle_mutation_data:
+    domain: mutation
+    desc: 模型体细胞突变(默认表，含外部CCLE数据)。长表：(模型,基因,突变)一行
+    big_table: true                   # 约547万行，必须带 model_uuid/gene_symbol 过滤，禁全表扫描
+    join_to_hub: [model_uuid]
+    columns:
+      model_uuid:   {type: varchar, desc: 关联 model_desc_info}
+      model_id:     {type: varchar, desc: 模型业务编号}
+      gene_symbol:  {type: varchar, desc: 关联 gene_info.Symbol}
+      species:      {type: varchar, desc: 物种(大小写编码人/鼠)}
+      mutation_id:  {type: text, desc: 突变标识(如 EGFR:L858R)}
+      variant_classification: {type: text, desc: 变异分类(如 Missense_Mutation)}
+      hgvsc:        {type: text, desc: HGVS 编码序列变化}
+      hgvsp_short:  {type: text, desc: HGVS 蛋白变化简写(如 p.L858R)}
+      dbsnp_rs:     {type: text, desc: dbSNP rs 编号}
+      sift:         {type: text, desc: SIFT 有害性预测}
+      polyphen:     {type: text, desc: PolyPhen 有害性预测}
+      hotspot_mutation: {type: text, desc: 是否热点突变}
+      data_source:  {type: varchar, desc: 数据来源}
+
+  oncokb:
+    domain: mutation
+    desc: OncoKB 临床注释(基因+突变 -> 致癌性/可用药等级)，按 gene/mutant 关联
+    columns:
+      gene:            {type: varchar, desc: 基因符号(关联 gene_info.Symbol)}
+      mutant:          {type: varchar, desc: 突变(氨基酸改变，如 L858R)}
+      oncogenic:       {type: varchar, desc: 致癌性判定}
+      mutation_effect: {type: varchar, desc: 突变功能效应}
+      level:           {type: varchar, desc: 临床证据等级}
+      level_associated_cancer_types: {type: varchar, desc: 等级关联癌种}
+      citations:       {type: integer, desc: 文献引用数}
+
   gene_info:
     domain: reference
     desc: 基因字典(当前权威表)，symbol 唯一
@@ -144,6 +176,8 @@ relationships:
   - {from: "*.model_uuid", to: model_desc_info.model_uuid, type: many_to_one}
   - {from: "model_efficacy_*.{model_uuid,efficacy_num,group_id}", to: model_efficacy_info, desc: 药效明细->枢纽}
   - {from: model_ccle_expression_data.gene_symbol, to: gene_info.Symbol, type: many_to_one}
+  - {from: model_ccle_mutation_data.gene_symbol, to: gene_info.Symbol, type: many_to_one}
+  - {from: oncokb.gene, to: gene_info.Symbol, type: many_to_one}
   - {from: gene_synonyms.gene_symbol, to: gene_info.Symbol, type: many_to_one}
 
 # ----------- 确定性查找工具(不交给LLM猜) -----------
