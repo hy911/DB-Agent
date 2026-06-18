@@ -32,9 +32,7 @@ def test_secure_rejects_non_select():
 
 
 def test_mutation_big_table_scan_without_filter_needs_explain():
-    secured = secure_query(
-        "SELECT count(*) FROM model_ccle_mutation_data", LAYER, "mutation"
-    )
+    secured = secure_query("SELECT count(*) FROM model_ccle_mutation_data", LAYER, "mutation")
     assert secured.needs_explain is True
     assert "model_ccle_mutation_data" in secured.big_tables
 

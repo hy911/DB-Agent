@@ -303,5 +303,5 @@ def test_assemble_context_mutation_omits_permission_note():
     ctx = assemble_context_node(s, deps)["context"]
     assert "model_ccle_mutation_data" in ctx
     assert "oncokb" in ctx
-    assert "do not" not in ctx.lower()           # not access-controlled
+    assert "do not" not in ctx.lower()  # not access-controlled
     assert "p53 -> TP53" in ctx or "p53 → TP53" in ctx
