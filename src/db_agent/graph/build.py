@@ -40,9 +40,7 @@ def build_graph(deps: Deps):
         ["extract_genes", "assemble_context", END],
     )
     g.add_edge("extract_genes", "resolve_genes")
-    g.add_conditional_edges(
-        "resolve_genes", nodes.after_resolve, ["assemble_context", END]
-    )
+    g.add_conditional_edges("resolve_genes", nodes.after_resolve, ["assemble_context", END])
     g.add_edge("assemble_context", "generate_sql")
     g.add_edge("generate_sql", "guard")
     g.add_conditional_edges("guard", nodes.after_guard, ["execute", "generate_sql", END])

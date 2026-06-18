@@ -51,7 +51,9 @@ def resolve_genes_node(state: AgentState, deps: Deps) -> dict:
             }
         else:  # unknown
             return {
-                "clarification": f"I couldn't find a gene matching '{name}'. Please check the name.",
+                "clarification": (
+                    f"I couldn't find a gene matching '{name}'. Please check the name."
+                ),
                 "status": "clarify",
             }
     return {"resolved_genes": resolved}
