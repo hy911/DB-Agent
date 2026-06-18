@@ -1,0 +1,47 @@
+from __future__ import annotations
+
+from db_agent.db.gene_resolver import GeneMatch, GeneResolution, _decide
+
+
+def _gm(symbol, *, via="symbol_exact", score=1.0, species="human"):
+    return GeneMatch(symbol=symbol, species=species, via=via, score=score)
+
+
+def test_unique_exact_is_resolved():
+    res = _decide("EGFR", [_gm("EGFR")], [])
+    assert isinstance(res, GeneResolution)
+    assert res.status == "resolved"
+    assert res.symbol == "EGFR"
+    assert res.query == "EGFR"
+
+
+def test_multiple_distinct_exact_is_ambiguous():
+    res = _decide("x", [_gm("TP53"), _gm("Trp53", species="mouse")], [])
+    assert res.status == "ambiguous"
+    assert res.symbol is None
+    assert {m.symbol for m in res.candidates} == {"TP53", "Trp53"}
+
+
+def test_same_symbol_twice_still_resolved():
+    # symbol-exact and synonym-exact both pointing at one symbol
+    res = _decide("EGFR", [_gm("EGFR"), _gm("EGFR", via="synonym_exact")], [])
+    assert res.status == "resolved"
+    assert res.symbol == "EGFR"
+
+
+def test_fuzzy_only_is_ambiguous_sorted_desc():
+    res = _decide(
+        "egfr",
+        [],
+        [_gm("Egfr", via="fuzzy", score=0.5), _gm("EGFR", via="fuzzy", score=0.8)],
+    )
+    assert res.status == "ambiguous"
+    assert res.symbol is None
+    assert [m.symbol for m in res.candidates] == ["EGFR", "Egfr"]
+
+
+def test_no_match_is_unknown():
+    res = _decide("zzz", [], [])
+    assert res.status == "unknown"
+    assert res.symbol is None
+    assert res.candidates == []
