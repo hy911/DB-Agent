@@ -172,3 +172,34 @@ def test_expression_unknown_gene_clarifies():
     )
     assert res.status == "clarify"
     assert "notagene" in res.clarification
+
+
+def test_mutation_end_to_end_resolves_gene():
+    llm = _LLM(
+        {
+            "qwen-fast": ["mutation", "p53"],  # route, then extract_genes
+            "qwen-code": [
+                "SELECT model_uuid, mutation_id FROM model_ccle_mutation_data "
+                "WHERE gene_symbol = 'TP53'"
+            ],
+            "qwen-main": ["3 models carry a TP53 mutation."],
+        }
+    )
+    qr = QueryResult(
+        columns=["model_uuid", "mutation_id"],
+        rows=[{"model_uuid": "m1", "mutation_id": "TP53:R175H"}],
+        rowcount=1,
+        truncated=False,
+        sql="SELECT model_uuid, mutation_id",
+        elapsed_ms=1.0,
+    )
+    res = _run(
+        llm,
+        _Replica([qr]),
+        question="which models have a p53 mutation?",
+        resolve_gene=_resolver({"p53": "TP53"}),
+    )
+    assert res.status == "answered"
+    assert res.answer == "3 models carry a TP53 mutation."
+    assert "for_bd" not in (res.sql or "").lower()  # mutation: not access-controlled
+    assert "model_ccle_mutation_data" in res.sql.lower()

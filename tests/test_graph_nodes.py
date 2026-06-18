@@ -281,3 +281,27 @@ def test_answer_node_sets_answer():
     out = answer_node(s, deps)
     assert out["answer"] == "One row."
     assert out["status"] == "answered"
+
+
+def test_route_mutation_sets_domain():
+    deps = _deps(llm=_LLM({"qwen-fast": ["mutation"]}))
+    out = route_node(initial_state("which models have a TP53 mutation?"), deps)
+    assert out["domain"] == "mutation"
+
+
+def test_after_route_mutation_goes_to_extract():
+    s = initial_state("q")
+    s["domain"] = "mutation"
+    assert after_route(s, _deps()) == "extract_genes"
+
+
+def test_assemble_context_mutation_omits_permission_note():
+    deps = _deps()
+    s = initial_state("q")
+    s["domain"] = "mutation"
+    s["resolved_genes"] = {"p53": "TP53"}
+    ctx = assemble_context_node(s, deps)["context"]
+    assert "model_ccle_mutation_data" in ctx
+    assert "oncokb" in ctx
+    assert "do not" not in ctx.lower()           # not access-controlled
+    assert "p53 -> TP53" in ctx or "p53 → TP53" in ctx
