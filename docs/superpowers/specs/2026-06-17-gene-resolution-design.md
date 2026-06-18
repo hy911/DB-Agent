@@ -23,8 +23,12 @@ ambiguous/unknown → the chain clarifies.
   the `semantic_layer.yaml` declaration `gene_info.symbol` is wrong and is
   corrected here). `gene_synonyms` (287,028 rows): columns `synonym`,
   `gene_symbol`, `species`.
-- Both gene tables carry a `species` column; synonyms are cross-species (e.g.
-  `P53 → TP53` human and `p53 → Trp53` mouse).
+- Both gene tables carry a `species` column, and **letter case encodes species**:
+  human symbols are upper (`EGFR`, `TP53`), mouse are title-case (`Egfr`, `Trp53`);
+  synonyms follow the same convention (`P53 → TP53` human, `p53 → Trp53` mouse).
+  Matching is therefore **case-sensitive** — a case-insensitive match would
+  collapse `EGFR`/`Egfr` and make nearly everything ambiguous (verified against
+  the live data).
 - `model_ccle_expression_data` is ~36M rows (the big table); the EXPLAIN gate
   already protects it.
 
@@ -80,8 +84,8 @@ class GeneResolution:
 `resolve_gene(replica, name, *, fuzzy_threshold=0.4, limit=5) -> GeneResolution`:
 - Runs **parameterized** read-only queries (the gene name is always a bound
   parameter, never interpolated):
-  - exact symbol: `SELECT "Symbol", species FROM gene_info WHERE lower("Symbol") = lower(%s)`
-  - exact synonym: `SELECT gs.gene_symbol AS symbol, gs.species FROM gene_synonyms gs WHERE lower(gs.synonym) = lower(%s)`
+  - exact symbol (case-sensitive): `SELECT "Symbol", species FROM gene_info WHERE "Symbol" = %s`
+  - exact synonym (case-sensitive): `SELECT gs.gene_symbol AS symbol, gs.species FROM gene_synonyms gs WHERE gs.synonym = %s`
   - fuzzy (only if no exact): `SELECT "Symbol", species, similarity("Symbol", %s) AS sim FROM gene_info WHERE similarity("Symbol", %s) > %s ORDER BY sim DESC LIMIT %s`
     (uses the `similarity()` function, not the `%` operator, to avoid psycopg
     placeholder clashes).
@@ -105,10 +109,11 @@ accordingly. This is a data fix in the YAML; the loader is unchanged.
 
 - Offline (`_decide`): unique exact → resolved; two exact symbols → ambiguous;
   no exact + fuzzy → ambiguous (sorted); nothing → unknown.
-- Integration (`-m integration`, real DB): `resolve_gene` for `TP53` (exact
-  resolved), `p53` (cross-species ambiguous → TP53 + Trp53), a misspelling like
-  `tpp53` (fuzzy candidates), and gibberish (unknown). Also a `ReadReplica.fetch`
-  parameterized smoke.
+- Integration (`-m integration`, real DB): `resolve_gene` for `EGFR` (case-exact
+  → resolved, symbol `EGFR`), `egfr` (no case-exact → fuzzy candidates →
+  ambiguous), and `zzzznotagene` (unknown). Also a `ReadReplica.fetch`
+  parameterized smoke. (Verified against live data: `EGFR`→`EGFR`, `Egfr`→`Egfr`,
+  `p53`→`Trp53`, `P53`→`TP53` all resolve case-sensitively.)
 
 ---
 
