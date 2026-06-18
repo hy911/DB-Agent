@@ -16,3 +16,9 @@ def test_routable_excludes_reference_and_undefined_domains():
     assert "reference" not in names  # dictionary domain, never routed
     assert "modeling" not in names  # forward-declared, no tables
     assert "mutation" not in names  # forward-declared, no tables
+
+
+def test_gene_info_symbol_column_matches_db_casing():
+    t = LAYER.get_table("gene_info")
+    assert t.has_column("Symbol")  # matches the real DB column
+    assert not t.has_column("symbol")

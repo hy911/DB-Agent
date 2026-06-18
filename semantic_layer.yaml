@@ -125,7 +125,7 @@ tables:
     domain: reference
     desc: 基因字典(当前权威表)，symbol 唯一
     columns:
-      symbol:       {type: text, desc: 基因官方符号(连接键), unique: true}
+      Symbol:       {type: text, desc: 基因官方符号(连接键), unique: true}
       GeneID:       {type: integer, desc: NCBI Entrez ID}
       synonyms:     {type: text, desc: 同义名(分隔字符串)}
       chromosome:   {type: integer, desc: 染色体}
@@ -143,10 +143,10 @@ tables:
 relationships:
   - {from: "*.model_uuid", to: model_desc_info.model_uuid, type: many_to_one}
   - {from: "model_efficacy_*.{model_uuid,efficacy_num,group_id}", to: model_efficacy_info, desc: 药效明细->枢纽}
-  - {from: model_ccle_expression_data.gene_symbol, to: gene_info.symbol, type: many_to_one}
-  - {from: gene_synonyms.gene_symbol, to: gene_info.symbol, type: many_to_one}
+  - {from: model_ccle_expression_data.gene_symbol, to: gene_info.Symbol, type: many_to_one}
+  - {from: gene_synonyms.gene_symbol, to: gene_info.Symbol, type: many_to_one}
 
 # ----------- 确定性查找工具(不交给LLM猜) -----------
 lookup_tools:
-  resolve_gene: {source: [gene_synonyms.synonym, gene_info.symbol], output: gene_info.symbol, method: 精确+pg_trgm模糊}
+  resolve_gene: {source: [gene_synonyms.synonym, gene_info.Symbol], output: gene_info.Symbol, method: 精确(大小写敏感)+pg_trgm模糊}
   resolve_cancer_type: {source: cancer_type_short_names, output: model_desc_info.cancer_type}
