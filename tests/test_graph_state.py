@@ -22,3 +22,17 @@ def test_to_result_maps_fields():
     assert r.answer == "42"
     assert r.sql == "SELECT 1 LIMIT 1000"
     assert r.clarification is None
+
+
+def test_initial_state_has_gene_fields():
+    s = initial_state("q")
+    assert s["extracted_genes"] == []
+    assert s["resolved_genes"] == {}
+
+
+def test_deps_default_resolve_gene_is_callable():
+    from db_agent.config import Settings
+    from db_agent.graph.state import Deps
+
+    deps = Deps(llm=object(), replica=object(), layer=object(), settings=Settings(_env_file=None))
+    assert callable(deps.resolve_gene)
