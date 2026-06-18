@@ -69,8 +69,7 @@ domain route / clarify → context assembly (yaml) → SQL gen (qwen-code)
 Done:
 - **All layers built**: semantic / sql / db / llm / graph / api / observability.
 - **Multi-domain routing is data-driven** (`SemanticLayer.routable_domains()`):
-  routes `{efficacy, expression, mutation}` today; `modeling` auto-joins once its
-  tables are added to `semantic_layer.yaml` (no code change).
+  routes all four domains `{efficacy, expression, mutation, modeling}`.
 - **expression** domain (gene expression; NOT access-controlled → no permission
   injection; the big-table EXPLAIN gate applies to `model_ccle_expression_data`).
 - **mutation** domain (somatic mutations; NOT access-controlled; added
@@ -78,6 +77,14 @@ Done:
   gene-bearing) + `oncokb` clinical annotation (domain=mutation → fed only for
   mutation questions). Added as a **pure `semantic_layer.yaml` change** (zero
   source changes) — proof the data-driven extension path works.
+- **modeling** domain (PDX/CDX 建模 characterization; **access-controlled**; added
+  2026-06-18, live-verified + SQL-security-reviewed). Hub `modeling_attr_info`
+  (`for_bd='yes'`) + 3 detail tables (tumor_volume / body_weight / survival)
+  filtered by `EXISTS` semi-join on `(model_uuid, model_no, group_id)`. Added as a
+  **pure `semantic_layer.yaml` change** (zero source changes) — the **first
+  access-controlled domain added via config**, exercising the real permission-
+  injection path (not the no-op). The remaining modeling detail tables (facs /
+  imaging / elisa / panel / pathology) are addable later, same pattern.
 - **resolve_gene** tool (`db/gene_resolver.py`): deterministic gene-name →
   canonical symbol (case-sensitive exact + pg_trgm fuzzy as clarify-only
   candidates).
@@ -91,9 +98,9 @@ sql-gen context; any ambiguous/unknown short-circuits to clarify. The resolver i
 injected via `Deps.resolve_gene` (default = real `db.resolve_gene`) so the graph
 stays offline-testable. Design specs + plans live under `docs/superpowers/`.
 
-Still deferred (do not build until asked): the **modeling** domain (access-
-controlled, large efficacy-parallel detail-table set — its own spec/plan when
-asked), pgvector example retrieval, stats sandbox, DuckDB, LLM gateway
+Still deferred (do not build until asked): the remaining **modeling** detail
+tables (facs / imaging / elisa / panel / pathology — same pattern, zero code),
+pgvector example retrieval, stats sandbox, DuckDB, LLM gateway
 retry/backoff (a real gap — a live answer-node call hit a transient 504 during
 mutation e2e).
 
