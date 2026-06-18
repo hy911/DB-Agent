@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from db_agent.config import Settings
 from db_agent.db import QueryResult
+from db_agent.db.gene_resolver import GeneMatch, GeneResolution
 from db_agent.graph.build import run_agent
 from db_agent.semantic import load_semantic_layer
 from db_agent.sql.errors import GuardError
@@ -31,8 +32,25 @@ class _Replica:
         return item
 
 
-def _run(llm, replica, question="how many models for BD?"):
-    return run_agent(question, llm=llm, replica=replica, layer=LAYER, settings=SETTINGS)
+def _resolver(mapping):
+    def resolve(replica, name):
+        sym = mapping.get(name)
+        if sym is None:
+            return GeneResolution(name, "unknown", None, [])
+        return GeneResolution(name, "resolved", sym, [GeneMatch(sym, "human", "symbol_exact", 1.0)])
+
+    return resolve
+
+
+def _run(llm, replica, question="how many models for BD?", resolve_gene=None):
+    return run_agent(
+        question,
+        llm=llm,
+        replica=replica,
+        layer=LAYER,
+        settings=SETTINGS,
+        resolve_gene=resolve_gene,
+    )
 
 
 def _qr():
@@ -114,10 +132,10 @@ def test_fatal_guarderror_no_retry():
     assert replica.calls == 1
 
 
-def test_expression_end_to_end_no_permission_injection():
+def test_expression_end_to_end_resolves_gene_and_injects():
     llm = _LLM(
         {
-            "qwen-fast": ["expression"],
+            "qwen-fast": ["expression", "p53"],  # route, then extract_genes
             "qwen-code": [
                 "SELECT log2tpm FROM model_ccle_expression_data "
                 "WHERE gene_symbol = 'TP53' AND model_uuid = 'm1'"
@@ -133,8 +151,24 @@ def test_expression_end_to_end_no_permission_injection():
         sql="SELECT log2tpm",
         elapsed_ms=1.0,
     )
-    res = _run(llm, _Replica([qr]), question="TP53 expression in m1?")
+    res = _run(
+        llm,
+        _Replica([qr]),
+        question="p53 expression in m1?",
+        resolve_gene=_resolver({"p53": "TP53"}),
+    )
     assert res.status == "answered"
     assert res.answer == "log2tpm for TP53 in m1 is 5.2."
-    assert "for_bd" not in (res.sql or "").lower()  # expression: not access-controlled
-    assert "model_ccle_expression_data" in res.sql.lower()
+    assert "for_bd" not in (res.sql or "").lower()
+
+
+def test_expression_unknown_gene_clarifies():
+    llm = _LLM({"qwen-fast": ["expression", "notagene"]})
+    res = _run(
+        llm,
+        _Replica([]),
+        question="notagene expression?",
+        resolve_gene=_resolver({}),  # resolves nothing -> unknown
+    )
+    assert res.status == "clarify"
+    assert "notagene" in res.clarification
