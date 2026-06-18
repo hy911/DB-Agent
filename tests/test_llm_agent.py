@@ -33,8 +33,8 @@ def test_route_expression():
 
 
 def test_route_unroutable_domain_is_clarify():
-    c = _ScriptedClient("modeling")  # not in the routable set
-    res = route(c, SETTINGS, "modeling stuff", DOMAINS)
+    c = _ScriptedClient("reference")  # a real domain, but deliberately not routable
+    res = route(c, SETTINGS, "dictionary stuff", DOMAINS)
     assert res.domain is None
     assert res.clarification
 
