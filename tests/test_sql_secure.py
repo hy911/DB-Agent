@@ -29,3 +29,20 @@ def test_secure_rejects_out_of_scope_table():
 def test_secure_rejects_non_select():
     with pytest.raises(GuardError):
         secure_query("UPDATE model_efficacy_info SET for_bd='no'", LAYER, "efficacy")
+
+
+def test_mutation_big_table_scan_without_filter_needs_explain():
+    secured = secure_query(
+        "SELECT count(*) FROM model_ccle_mutation_data", LAYER, "mutation"
+    )
+    assert secured.needs_explain is True
+    assert "model_ccle_mutation_data" in secured.big_tables
+
+
+def test_mutation_big_table_with_gene_filter_skips_explain():
+    secured = secure_query(
+        "SELECT mutation_id FROM model_ccle_mutation_data WHERE gene_symbol = 'TP53'",
+        LAYER,
+        "mutation",
+    )
+    assert secured.needs_explain is False
