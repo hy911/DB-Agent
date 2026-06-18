@@ -49,3 +49,10 @@ def test_extract_genes_messages_include_question():
     assert msgs[0]["role"] == "system"
     assert "gene" in " ".join(m["content"] for m in msgs).lower()
     assert "expression of p53?" in msgs[-1]["content"]
+
+
+def test_sql_system_prompt_is_domain_neutral():
+    msgs = sql_messages("q", "ctx")
+    system = msgs[0]["content"].lower()
+    assert "efficacy domain" not in system
+    assert "select" in system  # still instructs a read-only SELECT

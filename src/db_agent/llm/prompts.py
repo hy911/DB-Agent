@@ -8,7 +8,8 @@ if TYPE_CHECKING:
     from db_agent.semantic.model import Domain
 
 _SQL_SYSTEM = (
-    "You write exactly one read-only PostgreSQL SELECT for the efficacy domain. "
+    "You write exactly one read-only PostgreSQL SELECT for a mouse tumor-model "
+    "database. "
     "Use only the tables and columns in the provided schema context. Do not write "
     "INSERT/UPDATE/DELETE/DDL. Return only the SQL, with no prose and no code "
     "fences."
