@@ -4,15 +4,19 @@ from langgraph.graph import END
 
 from db_agent.config import Settings
 from db_agent.db import QueryResult
+from db_agent.db.gene_resolver import GeneMatch, GeneResolution
 from db_agent.graph.nodes import (
     after_execute,
     after_guard,
+    after_resolve,
     after_route,
     answer_node,
     assemble_context_node,
     execute_node,
+    extract_genes_node,
     generate_sql_node,
     guard_node,
+    resolve_genes_node,
     route_node,
 )
 from db_agent.graph.state import Deps, initial_state
@@ -44,8 +48,11 @@ class _Replica:
         return item
 
 
-def _deps(llm=None, replica=None):
-    return Deps(llm=llm, replica=replica, layer=LAYER, settings=SETTINGS)
+def _deps(llm=None, replica=None, resolve_gene=None):
+    kwargs = dict(llm=llm, replica=replica, layer=LAYER, settings=SETTINGS)
+    if resolve_gene is not None:
+        kwargs["resolve_gene"] = resolve_gene
+    return Deps(**kwargs)
 
 
 def test_route_efficacy_sets_domain():
@@ -63,10 +70,76 @@ def test_route_clarify_sets_status():
 
 
 def test_after_route_branches():
+    deps = _deps()
     s = initial_state("q")
-    assert after_route(s) == "assemble_context"
+    assert after_route(s, deps) == "assemble_context"
     s["status"] = "clarify"
-    assert after_route(s) == END
+    assert after_route(s, deps) == END
+
+
+def test_extract_genes_node():
+    deps = _deps(llm=_LLM({"qwen-fast": ["p53, EGFR"]}))
+    out = extract_genes_node(initial_state("p53 and EGFR?"), deps)
+    assert out["extracted_genes"] == ["p53", "EGFR"]
+
+
+def test_resolve_genes_node_all_resolved_injects_map():
+    def fake_resolver(replica, name):
+        return GeneResolution(
+            name, "resolved", "TP53", [GeneMatch("TP53", "human", "symbol_exact", 1.0)]
+        )
+
+    deps = _deps(resolve_gene=fake_resolver)
+    s = initial_state("q")
+    s["extracted_genes"] = ["p53"]
+    out = resolve_genes_node(s, deps)
+    assert out["resolved_genes"] == {"p53": "TP53"}
+    assert "status" not in out  # continues, no clarify
+
+
+def test_resolve_genes_node_ambiguous_clarifies():
+    def fake_resolver(replica, name):
+        return GeneResolution(
+            name,
+            "ambiguous",
+            None,
+            [
+                GeneMatch("TP53", "human", "symbol_exact", 1.0),
+                GeneMatch("Trp53", "mouse", "symbol_exact", 1.0),
+            ],
+        )
+
+    deps = _deps(resolve_gene=fake_resolver)
+    s = initial_state("q")
+    s["extracted_genes"] = ["p53"]
+    out = resolve_genes_node(s, deps)
+    assert out["status"] == "clarify"
+    assert "TP53" in out["clarification"] and "Trp53" in out["clarification"]
+
+
+def test_after_resolve_branches():
+    s = initial_state("q")
+    assert after_resolve(s) == "assemble_context"
+    s["status"] = "clarify"
+    assert after_resolve(s) == END
+
+
+def test_after_route_gene_bearing_goes_to_extract():
+    s = initial_state("q")
+    s["domain"] = "expression"
+    assert after_route(s, _deps()) == "extract_genes"
+    s2 = initial_state("q")
+    s2["domain"] = "efficacy"
+    assert after_route(s2, _deps()) == "assemble_context"
+
+
+def test_assemble_context_injects_resolved_genes():
+    deps = _deps()
+    s = initial_state("q")
+    s["domain"] = "expression"
+    s["resolved_genes"] = {"p53": "TP53"}
+    ctx = assemble_context_node(s, deps)["context"]
+    assert "p53 -> TP53" in ctx or "p53 → TP53" in ctx
 
 
 def test_assemble_context_efficacy_has_permission_note():

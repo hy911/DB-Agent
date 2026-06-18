@@ -11,6 +11,7 @@ from langgraph.graph import END
 
 from db_agent.graph.state import AgentState, Deps
 from db_agent.llm import answer as llm_answer
+from db_agent.llm import extract_genes as llm_extract_genes
 from db_agent.llm import generate_sql as llm_generate_sql
 from db_agent.llm import route as llm_route
 from db_agent.sql.errors import GuardError
@@ -24,12 +25,44 @@ def route_node(state: AgentState, deps: Deps) -> dict:
     return {"clarification": res.clarification, "status": "clarify"}
 
 
-def after_route(state: AgentState) -> str:
+def after_route(state: AgentState, deps: Deps) -> str:
+    if state["status"] == "clarify":
+        return END
+    if deps.layer.is_gene_bearing(state["domain"]):
+        return "extract_genes"
+    return "assemble_context"
+
+
+def extract_genes_node(state: AgentState, deps: Deps) -> dict:
+    return {"extracted_genes": llm_extract_genes(deps.llm, deps.settings, state["question"])}
+
+
+def resolve_genes_node(state: AgentState, deps: Deps) -> dict:
+    resolved: dict[str, str] = {}
+    for name in state["extracted_genes"]:
+        res = deps.resolve_gene(deps.replica, name)
+        if res.status == "resolved":
+            resolved[name] = res.symbol
+        elif res.status == "ambiguous":
+            cands = ", ".join(sorted({m.symbol for m in res.candidates})[:5])
+            return {
+                "clarification": f"The gene '{name}' is ambiguous — did you mean one of: {cands}?",
+                "status": "clarify",
+            }
+        else:  # unknown
+            return {
+                "clarification": f"I couldn't find a gene matching '{name}'. Please check the name.",
+                "status": "clarify",
+            }
+    return {"resolved_genes": resolved}
+
+
+def after_resolve(state: AgentState) -> str:
     return END if state["status"] == "clarify" else "assemble_context"
 
 
 def assemble_context_node(state: AgentState, deps: Deps) -> dict:
-    return {"context": _render_context(deps, state["domain"])}
+    return {"context": _render_context(deps, state["domain"], state["resolved_genes"])}
 
 
 def generate_sql_node(state: AgentState, deps: Deps) -> dict:
@@ -89,7 +122,7 @@ def _on_guard_error(state: AgentState, deps: Deps, e: GuardError) -> dict:
     return {"outcome": "retry", "last_error": msg}
 
 
-def _render_context(deps: Deps, domain: str) -> str:
+def _render_context(deps: Deps, domain: str, resolved_genes: dict[str, str]) -> str:
     """Render the domain's schema for sql-gen: columns with descriptions, plus —
     only for an access-controlled domain — a note that the permission columns are
     filtered automatically (so the model never filters or guesses them)."""
@@ -107,4 +140,7 @@ def _render_context(deps: Deps, domain: str) -> str:
             f"columns: {perm}. Do NOT add WHERE conditions on them — the system "
             f"applies the correct filter for you."
         )
+    if resolved_genes:
+        mapping = ", ".join(f"{name} -> {symbol}" for name, symbol in resolved_genes.items())
+        lines.append(f"\nResolved gene names (use these canonical symbols): {mapping}")
     return "\n".join(lines)
