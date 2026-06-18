@@ -106,7 +106,7 @@ def validation_config_for_domain(
         allowed_tables=frozenset(allowed),
         default_limit=default_limit,
         max_limit=max_limit,
-        big_tables=big or frozenset({"model_ccle_expression_data"}),
+        big_tables=big,
     )
 
 
