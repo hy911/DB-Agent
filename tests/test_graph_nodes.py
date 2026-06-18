@@ -305,3 +305,13 @@ def test_assemble_context_mutation_omits_permission_note():
     assert "oncokb" in ctx
     assert "do not" not in ctx.lower()  # not access-controlled
     assert "p53 -> TP53" in ctx or "p53 → TP53" in ctx
+
+
+def test_oncokb_only_fed_for_mutation_not_other_domains():
+    # oncokb is domain=mutation, so it must not leak into efficacy/expression context.
+    deps = _deps()
+    for domain in ("efficacy", "expression"):
+        s = initial_state("q")
+        s["domain"] = domain
+        ctx = assemble_context_node(s, deps)["context"]
+        assert "oncokb" not in ctx
