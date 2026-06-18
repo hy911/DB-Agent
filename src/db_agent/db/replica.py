@@ -13,6 +13,7 @@ delegates every decision to the pure modules (explain, mapping).
 from __future__ import annotations
 
 import time
+from collections.abc import Sequence
 
 import psycopg
 from psycopg.rows import dict_row
@@ -89,6 +90,17 @@ class ReadReplica:
             sql=sql,
             elapsed_ms=elapsed_ms,
         )
+
+    def fetch(self, sql: str, params: Sequence[object] = ()) -> list[dict[str, object]]:
+        """Run a trusted, parameterized read-only query and return rows as dicts.
+
+        For hand-written internal queries (e.g. gene resolution) — NOT for
+        LLM-generated SQL, which must go through `execute`'s securing/EXPLAIN path.
+        The value is always bound as a parameter, never interpolated.
+        """
+        with self.pool.connection() as conn, conn.cursor() as cur:
+            cur.execute(sql, params)
+            return cur.fetchall()
 
 
 def _plan_payload(row: dict[str, object] | None) -> object:

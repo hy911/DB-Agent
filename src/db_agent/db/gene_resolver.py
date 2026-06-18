@@ -41,3 +41,41 @@ def _decide(query: str, exact: list[GeneMatch], fuzzy: list[GeneMatch]) -> GeneR
         ranked = sorted(fuzzy, key=lambda m: m.score, reverse=True)
         return GeneResolution(query, "ambiguous", None, ranked)
     return GeneResolution(query, "unknown", None, [])
+
+
+def resolve_gene(
+    replica: ReadReplica, name: str, *, fuzzy_threshold: float = 0.4, limit: int = 5
+) -> GeneResolution:
+    exact: list[GeneMatch] = []
+    for row in replica.fetch(
+        'SELECT "Symbol" AS symbol, species FROM gene_info WHERE "Symbol" = %s', (name,)
+    ):
+        exact.append(
+            GeneMatch(
+                symbol=row["symbol"], species=row.get("species"), via="symbol_exact", score=1.0
+            )
+        )
+    for row in replica.fetch(
+        "SELECT gene_symbol AS symbol, species FROM gene_synonyms WHERE synonym = %s", (name,)
+    ):
+        exact.append(
+            GeneMatch(
+                symbol=row["symbol"], species=row.get("species"), via="synonym_exact", score=1.0
+            )
+        )
+
+    fuzzy: list[GeneMatch] = []
+    if not exact:
+        rows = replica.fetch(
+            'SELECT "Symbol" AS symbol, species, similarity("Symbol", %s) AS sim '
+            'FROM gene_info WHERE similarity("Symbol", %s) > %s ORDER BY sim DESC LIMIT %s',
+            (name, name, fuzzy_threshold, limit),
+        )
+        fuzzy = [
+            GeneMatch(
+                symbol=r["symbol"], species=r.get("species"), via="fuzzy", score=float(r["sim"])
+            )
+            for r in rows
+        ]
+
+    return _decide(name, exact, fuzzy)
