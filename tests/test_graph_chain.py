@@ -203,3 +203,25 @@ def test_mutation_end_to_end_resolves_gene():
     assert res.answer == "3 models carry a TP53 mutation."
     assert "for_bd" not in (res.sql or "").lower()  # mutation: not access-controlled
     assert "model_ccle_mutation_data" in res.sql.lower()
+
+
+def test_modeling_end_to_end_injects_permission():
+    llm = _LLM(
+        {
+            "qwen-fast": ["modeling"],  # not gene-bearing -> no extract_genes call
+            "qwen-code": ["SELECT model_no FROM modeling_attr_info"],
+            "qwen-main": ["3 modeling groups are visible to BD."],
+        }
+    )
+    qr = QueryResult(
+        columns=["model_no"],
+        rows=[{"model_no": "M1"}],
+        rowcount=1,
+        truncated=False,
+        sql="SELECT model_no",
+        elapsed_ms=1.0,
+    )
+    res = _run(llm, _Replica([qr]), question="how many modeling groups for BD?")
+    assert res.status == "answered"
+    assert res.answer == "3 modeling groups are visible to BD."
+    assert "for_bd" in (res.sql or "").lower()  # permission injected into the SQL that ran

@@ -315,3 +315,27 @@ def test_oncokb_only_fed_for_mutation_not_other_domains():
         s["domain"] = domain
         ctx = assemble_context_node(s, deps)["context"]
         assert "oncokb" not in ctx
+
+
+def test_route_modeling_sets_domain():
+    deps = _deps(llm=_LLM({"qwen-fast": ["modeling"]}))
+    out = route_node(initial_state("modeling tumor volume for model X?"), deps)
+    assert out["domain"] == "modeling"
+
+
+def test_after_route_modeling_skips_gene_nodes():
+    # modeling is not gene-bearing, so it goes straight to assemble_context.
+    s = initial_state("q")
+    s["domain"] = "modeling"
+    assert after_route(s, _deps()) == "assemble_context"
+
+
+def test_assemble_context_modeling_has_permission_note():
+    deps = _deps()
+    s = initial_state("q")
+    s["domain"] = "modeling"
+    ctx = assemble_context_node(s, deps)["context"]
+    assert "modeling_attr_info" in ctx
+    assert "modeling_tumor_volume_growth_curve_data" in ctx
+    assert "for_bd" in ctx
+    assert "do not" in ctx.lower()  # permission note present (access-controlled)
