@@ -29,7 +29,8 @@ Architecture (already agreed, build to these):
    domain's tables + the `model_desc_info` spine are fed into SQL-gen context.
    No naive schema RAG.
 2. **Spine key** `model_uuid` joins everything to `model_desc_info`; omics side
-   joins on `gene_symbol` to `gene_info.symbol`.
+   joins on `gene_symbol` to `gene_info."Symbol"` (capital S — case-sensitive,
+   see Gotchas).
 3. **Permission injection is deterministic, never the LLM's job.** After SQL
    generation, parse the AST with sqlglot and splice WHERE conditions based on
    policy. Detail tables carry no permission column — filter them via the hub.
@@ -54,19 +55,36 @@ Architecture (already agreed, build to these):
   django/auth/rbac system tables, `m_`-prefixed mirror tables, and `*_stats`
   deprecated tables.
 
-## Phase 1 MVP scope (current)
+## Status (2026-06-17)
 
-**Efficacy domain only**, one end-to-end chain:
+**Phase 1 MVP complete and live-verified** end-to-end through the FastAPI
+endpoint. **Phase 2 in progress.** The full chain (all layers built):
 
 ```
-intent route / clarify → context assembly (yaml) → SQL gen (qwen-code)
-  → sqlglot validate + permission inject → read-replica exec → self-correct (≤3)
-  → NL answer + generated SQL   (exposed via one FastAPI endpoint)
+domain route / clarify → context assembly (yaml) → SQL gen (qwen-code)
+  → sqlglot validate + permission inject (sql/secure.py) → read-replica exec
+  → self-correct (≤3) → NL answer + generated SQL          (POST /query)
 ```
 
-Deferred to Phase 2/3 (do not build now): stats sandbox, pgvector example
-retrieval, the modeling/expression/mutation domains, DuckDB optimization, real
-`resolve_gene`.
+Done:
+- **All layers built**: semantic / sql / db / llm / graph / api / observability.
+- **Multi-domain routing is data-driven** (`SemanticLayer.routable_domains()`):
+  routes `{efficacy, expression}` today; modeling/mutation auto-join once their
+  tables are added to `semantic_layer.yaml` (no code change).
+- **expression** domain (gene expression; NOT access-controlled → no permission
+  injection; the big-table EXPLAIN gate applies to `model_ccle_expression_data`).
+- **resolve_gene** tool (`db/gene_resolver.py`): deterministic gene-name →
+  canonical symbol (case-sensitive exact + pg_trgm fuzzy as clarify-only
+  candidates).
+- **observability**: optional per-run JSONL log (`DBAGENT_OBSERVABILITY_LOG_PATH`).
+
+In progress: wiring `resolve_gene` into the question flow — Plan B at
+`docs/superpowers/plans/2026-06-17-gene-resolution-wiring.md` (written, not yet
+executed). Design specs + plans live under `docs/superpowers/`.
+
+Still deferred (do not build until asked): the modeling/mutation domains (await
+their table defs), pgvector example retrieval, stats sandbox, DuckDB, LLM gateway
+retry/backoff.
 
 ### Permission policy (Phase 1, confirmed with the user)
 
@@ -86,20 +104,28 @@ access:
 
 ```
 src/db_agent/
-  config.py             # Settings: replica DSN, guard limits, LiteLLM aliases
-  semantic/             # load + validate semantic_layer.yaml into frozen dataclasses
-  sql/
-    errors.py           # GuardError(category, message, retryable)
-    validator.py        # guard rail #1: read-only / allow-list / limit / big-table gate
-    permission.py       # guard rail #2: deterministic row-level filter injection
-  # to build: db/ (read-only pool, statement_timeout, EXPLAIN), llm/ (LiteLLM +
-  # prompts), graph/ (LangGraph nodes + wiring), api/ (FastAPI), observability/
-tests/                  # offline: no DB, no LLM
+  config.py        # Settings (replica DSN, guard limits, LiteLLM aliases via
+                   #   AliasChoices for deployed env names, observability_log_path)
+  semantic/        # frozen dataclasses from semantic_layer.yaml; routable_domains(),
+                   #   is_gene_bearing(), tables_in_domain()
+  sql/             # PURE guard rails (AST in, secured AST out): validator.py,
+                   #   permission.py, secure.py (one-call bridge), errors.py
+  db/              # the ONLY I/O boundary: replica.py (pool + execute + fetch),
+                   #   explain.py, mapping.py, result.py, gene_resolver.py
+  llm/             # LiteLLM client + prompts + tasks (route / generate_sql /
+                   #   answer / extract_genes)
+  graph/           # LangGraph: state.py (AgentState, Deps), nodes.py, build.py
+                   #   (build_graph + run_agent)
+  api/             # FastAPI: app.py (create_app, POST /query, GET /health)
+  observability/   # RunRecord + JsonlObserver (optional per-run logging)
+tests/             # offline default (no DB/LLM); tests/integration/ is -m integration
 ```
 
-Layering intent: `sql/` is pure (AST in, secured AST out, no I/O) so it stays
-unit-testable; `db/` is the only I/O boundary; `graph/nodes/` stay thin and push
-logic down into `sql/` and `db/`.
+Layering intent: `sql/` is pure (no I/O) so it stays unit-testable; `db/` is the
+only I/O boundary; `graph/` nodes stay thin and push logic into `sql/`/`db/`/`llm/`.
+**Dependency injection:** external deps live in `graph.state.Deps`; nodes are
+bound with `functools.partial(node, deps=deps)`; `run_agent` takes `observer=` /
+`resolve_gene=` overrides so the whole graph is offline-testable with fakes.
 
 ## Conventions
 
@@ -137,12 +163,30 @@ unless 3.11 support is explicitly dropped.
 
 - **sqlglot 30.x stores `FROM` under the `from_` arg key** (older versions used
   `from`). When walking a SELECT's direct sources, check both keys.
-- `semantic_layer.yaml` lists out-of-MVP domains (e.g. `modeling`) whose hub
-  table isn't defined yet — the loader treats an undefined domain hub as a
-  forward declaration, not an error.
+- `semantic_layer.yaml` lists domains whose hub/tables aren't defined yet
+  (`modeling`, `mutation`) — forward declarations, not errors. They're excluded
+  from `routable_domains()` until they gain tables.
 - The permission injector must snapshot SELECT scopes **before** mutating, and
   tag its generated `EXISTS` sub-select, so a second pass doesn't re-enter and
   double-filter (idempotency).
+- **DB is PostgreSQL 16 (`db_dev`); `pg_trgm` is installed.** Use the
+  `similarity()` *function* for fuzzy match, NOT the `%` operator (it clashes with
+  psycopg's parameter placeholders).
+- **Gene symbol casing encodes species**: human is upper (`EGFR`, `TP53`), mouse
+  is title-case (`Egfr`, `Trp53`). `gene_info`'s column is `"Symbol"` (capital S
+  → must double-quote in SQL). Gene matching is therefore **case-sensitive** — a
+  case-insensitive match collapses `EGFR`/`Egfr` and makes nearly everything
+  ambiguous.
+- **`ReadReplica.execute`** secures + runs LLM SQL (EXPLAIN gate, LIMIT);
+  **`ReadReplica.fetch(sql, params)`** is for trusted hand-written parameterized
+  queries (e.g. gene resolution) — value always bound, never interpolated.
+- **Tests:** `uv run pytest` is offline (DB/LLM faked, `integration` deselected);
+  `uv run pytest -m integration` runs live-DB tests (needs `.env` DSN).
+- `model_ccle_expression_data` is ~36M rows — the big-table EXPLAIN gate is real
+  and live-verified (it rejects a `SELECT AVG(...) FROM` with no filter).
+- **`.claude/` automations** (committed): PreToolUse confirm on edits to
+  `sql/permission.py`/`validator.py`; PostToolUse ruff; a Stop hook that asks for
+  the `sql-security-reviewer` subagent when `sql/` changed.
 
 ## Git
 
