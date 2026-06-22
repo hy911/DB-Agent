@@ -69,7 +69,7 @@ def test_happy_path():
     llm = _LLM(
         {
             "qwen-fast": ["efficacy"],
-            "qwen-code": ["SELECT drug_name FROM model_efficacy_info", "NONE"],
+            "qwen-code": ["SELECT drug_name FROM model_efficacy_info", "NONE", "NONE"],
             "qwen-main": ["Found 1 drug."],
         }
     )
@@ -87,6 +87,7 @@ def test_self_correction_then_success():
             "qwen-code": [
                 "SELECT bad_col FROM model_efficacy_info",
                 "SELECT drug_name FROM model_efficacy_info",
+                "NONE",
                 "NONE",
             ],
             "qwen-main": ["Recovered."],
@@ -142,6 +143,7 @@ def test_expression_end_to_end_resolves_gene_and_injects():
                 "SELECT log2tpm FROM model_ccle_expression_data "
                 "WHERE gene_symbol = 'TP53' AND model_uuid = 'm1'",
                 "NONE",
+                "NONE",
             ],
             "qwen-main": ["log2tpm for TP53 in m1 is 5.2."],
         }
@@ -185,6 +187,7 @@ def test_mutation_end_to_end_resolves_gene():
                 "SELECT model_uuid, mutation_id FROM model_ccle_mutation_data "
                 "WHERE gene_symbol = 'TP53'",
                 "NONE",
+                "NONE",
             ],
             "qwen-main": ["3 models carry a TP53 mutation."],
         }
@@ -213,7 +216,7 @@ def test_modeling_end_to_end_injects_permission():
     llm = _LLM(
         {
             "qwen-fast": ["modeling"],  # not gene-bearing -> no extract_genes call
-            "qwen-code": ["SELECT model_no FROM modeling_attr_info", "NONE"],
+            "qwen-code": ["SELECT model_no FROM modeling_attr_info", "NONE", "NONE"],
             "qwen-main": ["3 modeling groups are visible to BD."],
         }
     )
@@ -238,6 +241,7 @@ def test_analysis_end_to_end_runs_sandbox():
             "qwen-code": [
                 "SELECT drug_name, tgi_tv FROM model_efficacy_info",  # generate_sql
                 "SELECT drug_name, avg(tgi_tv) AS m FROM result GROUP BY drug_name",  # analyze
+                "NONE",  # stats: no test
             ],
             "qwen-main": ["Average TGI per drug computed."],
         }
@@ -268,3 +272,30 @@ def test_analysis_end_to_end_runs_sandbox():
     assert res.answer == "Average TGI per drug computed."
     assert "result" in captured["sql"].lower()  # sandbox ran the analysis SQL
     assert res.analysis_sql is not None and "avg" in res.analysis_sql.lower()
+
+
+def test_stats_end_to_end_runs_test():
+    llm = _LLM(
+        {
+            "qwen-fast": ["efficacy"],
+            "qwen-code": [
+                "SELECT group_id, tgi_tv FROM model_efficacy_info",  # generate_sql
+                "NONE",  # analyze: no reshape
+                '{"function": "welch_t_test", "params": {"value": "tgi_tv", "group": "group_id"}}',
+            ],
+            "qwen-main": ["The two groups differ significantly (p<0.05)."],
+        }
+    )
+    raw = QueryResult(
+        columns=["group_id", "tgi_tv"],
+        rows=[{"group_id": "A", "tgi_tv": v} for v in (10.0, 11.0, 12.0, 9.0)]
+        + [{"group_id": "B", "tgi_tv": v} for v in (2.0, 3.0, 1.0, 4.0)],
+        rowcount=8,
+        truncated=False,
+        sql="SELECT group_id, tgi_tv",
+        elapsed_ms=1.0,
+    )
+    res = _run(llm, _Replica([raw]), question="is the TGI difference between groups significant?")
+    assert res.status == "answered"
+    assert res.answer == "The two groups differ significantly (p<0.05)."
+    assert res.stat_request is not None and "welch_t_test" in res.stat_request

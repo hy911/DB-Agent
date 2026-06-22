@@ -11,6 +11,8 @@ from db_agent.db import GeneResolution, QueryResult, ReadReplica
 from db_agent.db import resolve_gene as _default_resolve_gene
 from db_agent.llm.client import LLMClient
 from db_agent.sandbox.engine import DuckDBSandbox
+from db_agent.sandbox.stats import StatResult
+from db_agent.sandbox.stats import run_stat as _default_run_stat
 from db_agent.semantic.model import SemanticLayer
 
 _default_run_sandbox = DuckDBSandbox().run
@@ -33,6 +35,8 @@ class AgentState(TypedDict):
     result: QueryResult | None
     analysis: QueryResult | None
     analysis_sql: str | None
+    stat_result: StatResult | None
+    stat_request: str | None
     answer: str | None
     clarification: str | None
     status: str  # running | answered | clarify | error
@@ -57,6 +61,8 @@ def initial_state(question: str) -> AgentState:
         result=None,
         analysis=None,
         analysis_sql=None,
+        stat_result=None,
+        stat_request=None,
         answer=None,
         clarification=None,
         status="running",
@@ -70,6 +76,7 @@ class AgentResult:
     answer: str | None
     sql: str | None
     analysis_sql: str | None
+    stat_request: str | None
     clarification: str | None
     error: str | None
     result: QueryResult | None
@@ -81,6 +88,7 @@ def to_result(state: AgentState) -> AgentResult:
         answer=state.get("answer"),
         sql=state.get("secured_sql"),
         analysis_sql=state.get("analysis_sql"),
+        stat_request=state.get("stat_request"),
         clarification=state.get("clarification"),
         error=state.get("error"),
         result=state.get("result"),
@@ -97,3 +105,4 @@ class Deps:
     run_sandbox: Callable[[list[str], list[dict[str, object]], str], QueryResult] = (
         _default_run_sandbox
     )
+    run_stat: Callable[[list[str], list[dict[str, object]], str], StatResult] = _default_run_stat

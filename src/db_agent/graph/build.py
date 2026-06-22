@@ -16,6 +16,7 @@ from db_agent.config import Settings
 from db_agent.db import GeneResolution, ReadReplica
 from db_agent.db.result import QueryResult
 from db_agent.graph import nodes
+from db_agent.sandbox.stats import StatResult
 from db_agent.graph.state import AgentResult, AgentState, Deps, initial_state, to_result
 from db_agent.llm.client import LLMClient
 from db_agent.observability.observer import Observer
@@ -33,6 +34,7 @@ def build_graph(deps: Deps):
     g.add_node("guard", partial(nodes.guard_node, deps=deps))
     g.add_node("execute", partial(nodes.execute_node, deps=deps))
     g.add_node("analyze", partial(nodes.analyze_node, deps=deps))
+    g.add_node("stats", partial(nodes.stats_node, deps=deps))
     g.add_node("answer", partial(nodes.answer_node, deps=deps))
 
     g.add_edge(START, "route")
@@ -47,7 +49,8 @@ def build_graph(deps: Deps):
     g.add_edge("generate_sql", "guard")
     g.add_conditional_edges("guard", nodes.after_guard, ["execute", "generate_sql", END])
     g.add_conditional_edges("execute", nodes.after_execute, ["analyze", "generate_sql", END])
-    g.add_edge("analyze", "answer")
+    g.add_edge("analyze", "stats")
+    g.add_edge("stats", "answer")
     g.add_edge("answer", END)
     return g.compile()
 
@@ -62,12 +65,15 @@ def run_agent(
     observer: Observer | None = None,
     resolve_gene: Callable[[ReadReplica, str], GeneResolution] | None = None,
     run_sandbox: Callable[[list[str], list[dict[str, object]], str], QueryResult] | None = None,
+    run_stat: Callable[[list[str], list[dict[str, object]], str], StatResult] | None = None,
 ) -> AgentResult:
     deps_kwargs = {"llm": llm, "replica": replica, "layer": layer, "settings": settings}
     if resolve_gene is not None:
         deps_kwargs["resolve_gene"] = resolve_gene
     if run_sandbox is not None:
         deps_kwargs["run_sandbox"] = run_sandbox
+    if run_stat is not None:
+        deps_kwargs["run_stat"] = run_stat
     deps = Deps(**deps_kwargs)
     graph = build_graph(deps)
     final = graph.invoke(initial_state(question))

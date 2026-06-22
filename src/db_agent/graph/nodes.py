@@ -12,9 +12,13 @@ from langgraph.graph import END
 from db_agent.graph.state import AgentState, Deps
 from db_agent.llm import analyze_sql as llm_analyze_sql
 from db_agent.llm import answer as llm_answer
+from db_agent.llm import answer_stat as llm_answer_stat
 from db_agent.llm import extract_genes as llm_extract_genes
 from db_agent.llm import generate_sql as llm_generate_sql
+from db_agent.llm import request_stat as llm_request_stat
 from db_agent.llm import route as llm_route
+from db_agent.llm.agent_llm import _rows_preview
+from db_agent.sandbox.stats import catalog_text
 from db_agent.sql.errors import GuardError
 from db_agent.sql.secure import secure_query
 
@@ -125,7 +129,41 @@ def analyze_node(state: AgentState, deps: Deps) -> dict:
     return {"analysis": analysis, "analysis_sql": sql}
 
 
+def stats_node(state: AgentState, deps: Deps) -> dict:
+    table = state.get("analysis")
+    if table is None:
+        table = state.get("result")
+    if table is None or table.rowcount == 0:
+        return {}
+    req = llm_request_stat(
+        deps.llm,
+        deps.settings,
+        state["question"],
+        table.columns,
+        _rows_preview(table),
+        catalog_text(),
+    )
+    if not req or req.strip().upper() == "NONE":
+        return {}
+    try:
+        stat = deps.run_stat(table.columns, table.rows, req)
+    except GuardError:
+        return {}  # fail-soft: stats are additive; degrade to the descriptive answer
+    return {"stat_result": stat, "stat_request": req}
+
+
 def answer_node(state: AgentState, deps: Deps) -> dict:
+    stat = state.get("stat_result")
+    if stat is not None:
+        text = llm_answer_stat(
+            deps.llm,
+            deps.settings,
+            state["question"],
+            state["secured_sql"],
+            state.get("analysis_sql"),
+            stat,
+        )
+        return {"answer": text, "status": "answered"}
     analysis = state.get("analysis")
     if analysis is not None:
         text = llm_answer(

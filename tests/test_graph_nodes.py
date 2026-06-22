@@ -19,6 +19,7 @@ from db_agent.graph.nodes import (
     guard_node,
     resolve_genes_node,
     route_node,
+    stats_node,
 )
 from db_agent.graph.state import Deps, initial_state
 from db_agent.semantic import load_semantic_layer
@@ -422,3 +423,104 @@ def test_assemble_context_modeling_has_permission_note():
     assert "modeling_tumor_volume_growth_curve_data" in ctx
     assert "for_bd" in ctx
     assert "do not" in ctx.lower()  # permission note present (access-controlled)
+
+
+def test_stats_node_runs_when_request_returned():
+    from db_agent.sandbox.stats.spec import StatResult
+
+    stat = StatResult(test="welch_t_test", stats={"p_value": 0.01}, groups=[], caveats=[])
+
+    def fake_run_stat(columns, rows, req):
+        assert columns == ["group_id", "tv"]
+        assert "welch_t_test" in req
+        return stat
+
+    deps = _deps(
+        llm=_LLM(
+            {
+                "qwen-code": [
+                    '{"function": "welch_t_test", "params": {"value": "tv", "group": "group_id"}}'
+                ]
+            }
+        )
+    )
+    object.__setattr__(deps, "run_stat", fake_run_stat)
+    s = initial_state("is tv different by group?")
+    s["result"] = _qr_rows()
+    out = stats_node(s, deps)
+    assert out["stat_result"] is stat
+    assert "welch_t_test" in out["stat_request"]
+
+
+def test_stats_node_prefers_analysis_table():
+    from db_agent.sandbox.stats.spec import StatResult
+
+    analysis = QueryResult(
+        columns=["grp", "val"],
+        rows=[{"grp": "A", "val": 1.0}],
+        rowcount=1,
+        truncated=False,
+        sql="SELECT grp, val FROM result",
+        elapsed_ms=0.0,
+    )
+    seen = {}
+
+    def fake_run_stat(columns, rows, req):
+        seen["columns"] = columns
+        return StatResult(test="t", stats={}, groups=[], caveats=[])
+
+    deps = _deps(llm=_LLM({"qwen-code": ['{"function": "welch_t_test", "params": {}}']}))
+    object.__setattr__(deps, "run_stat", fake_run_stat)
+    s = initial_state("q")
+    s["result"] = _qr_rows()
+    s["analysis"] = analysis
+    stats_node(s, deps)
+    assert seen["columns"] == ["grp", "val"]  # used the analysis table, not raw result
+
+
+def test_stats_node_none_passes_through():
+    deps = _deps(llm=_LLM({"qwen-code": ["NONE"]}))
+    s = initial_state("q")
+    s["result"] = _qr_rows()
+    assert stats_node(s, deps) == {}
+
+
+def test_stats_node_empty_table_skips_llm():
+    empty = QueryResult(
+        columns=["x"], rows=[], rowcount=0, truncated=False, sql="s", elapsed_ms=0.0
+    )
+    deps = _deps(llm=_LLM({}))  # no scripted response -> must not be called
+    s = initial_state("q")
+    s["result"] = empty
+    assert stats_node(s, deps) == {}
+
+
+def test_stats_node_guard_error_degrades():
+    def boom(columns, rows, req):
+        raise GuardError("stat_unknown_function", "nope", retryable=False)
+
+    deps = _deps(llm=_LLM({"qwen-code": ['{"function": "nope"}']}))
+    object.__setattr__(deps, "run_stat", boom)
+    s = initial_state("q")
+    s["result"] = _qr_rows()
+    assert stats_node(s, deps) == {}
+
+
+def test_answer_node_uses_stat_result_when_present():
+    from db_agent.sandbox.stats.spec import StatResult
+
+    stat = StatResult(
+        test="welch_t_test",
+        stats={"p_value": 0.01},
+        groups=[{"label": "A", "n": 4, "mean": 1.0}],
+        caveats=["Welch's t-test."],
+    )
+    deps = _deps(llm=_LLM({"qwen-main": ["Significant difference (p=0.01)."]}))
+    s = initial_state("q")
+    s["secured_sql"] = "SELECT group_id, tv FROM t"
+    s["analysis_sql"] = "SELECT group_id, tv FROM result"
+    s["result"] = _qr_rows()
+    s["stat_result"] = stat
+    out = answer_node(s, deps)
+    assert out["answer"] == "Significant difference (p=0.01)."
+    assert out["status"] == "answered"
