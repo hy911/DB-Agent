@@ -155,9 +155,18 @@ two-stage rerank is the deferred follow-up.
 Still deferred (do not build until asked): `modeling_panel_data` (needs a
 permission-grain decision, see above), **LLM gateway retry/backoff** (nice-to-have now
 that the 504 root cause is fixed — still worth adding for genuine transient blips),
-`qwen-reranker` rerank stage for example retrieval, and more stats tests (two-way
-ANOVA, post-hoc, Cox regression) — pure `sandbox/stats/registry.py` additions once
-asked.
+and more stats tests (two-way ANOVA, post-hoc, Cox regression) — pure
+`sandbox/stats/registry.py` additions once asked.
+
+**`qwen-reranker` two-stage rerank — BLOCKED on a gateway config fix (probed
+2026-06-22).** The model group `qwen-reranker` exists, but the gateway registers it
+under the **openai provider**, and LiteLLM's rerank route rejects that
+(`/v1/rerank` → 500 `Unsupported provider: openai`); it's also not a chat model
+(`/v1/chat/completions` → 404). To unblock: re-register `qwen-reranker` in the gateway
+config under a rerank-capable provider (infinity / jina / huggingface_rerank / custom)
+so `/v1/rerank` returns the standard `{results:[{index, relevance_score}]}`. Once that
+works, the rerank stage is a small add to `examples/retriever.py` (fetch a larger
+cosine top-N, rerank to top-k), off by default + fail-soft like the rest.
 
 ### Permission policy (Phase 1, confirmed with the user)
 
