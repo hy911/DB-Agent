@@ -28,7 +28,17 @@ _BANNED_FUNCS = frozenset(
         "read_blob",
         "glob",
         "sniff_csv",
+        "current_setting",
+        "set_config",
     }
+)
+
+# Some file-reader functions are promoted to dedicated sqlglot nodes in the duckdb
+# dialect (e.g. read_csv -> exp.ReadCSV), so their .name is "" and the name-based
+# check below would miss them — match those node classes directly. Guarded with
+# getattr so a sqlglot version lacking a class simply drops it from the tuple.
+_BANNED_NODE_TYPES = tuple(
+    t for t in (getattr(exp, n, None) for n in ("ReadCSV", "ReadParquet")) if t is not None
 )
 
 
@@ -59,6 +69,14 @@ def validate_analysis_sql(sql: str) -> exp.Expression:
         if name in _BANNED_FUNCS:
             raise GuardError(
                 "analysis_banned_function", f"function {name!r} is not allowed", retryable=False
+            )
+
+    if _BANNED_NODE_TYPES:
+        for _ in ast.find_all(*_BANNED_NODE_TYPES):
+            raise GuardError(
+                "analysis_banned_function",
+                "file-reader function is not allowed",
+                retryable=False,
             )
 
     return ast

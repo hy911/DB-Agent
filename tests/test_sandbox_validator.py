@@ -40,3 +40,17 @@ def test_rejects_file_function():
 def test_rejects_attach():
     with pytest.raises(GuardError):
         validate_analysis_sql("ATTACH 'evil.db'")
+
+
+def test_rejects_file_reader_in_scalar_position():
+    # read_csv/read_parquet parse to dedicated sqlglot nodes (name == ""); the
+    # node-class check must still reject them even with no FROM-clause table.
+    with pytest.raises(GuardError):
+        validate_analysis_sql("SELECT read_csv('pyproject.toml')")
+    with pytest.raises(GuardError):
+        validate_analysis_sql("SELECT read_parquet('x.parquet')")
+
+
+def test_rejects_current_setting():
+    with pytest.raises(GuardError):
+        validate_analysis_sql("SELECT current_setting('home_directory') FROM result")
