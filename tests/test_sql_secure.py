@@ -71,9 +71,7 @@ def test_secure_modeling_detail_injects_exists_semijoin():
 
 
 def test_secure_modeling_facs_injects_exists_semijoin():
-    out = secure_query(
-        "SELECT val FROM modeling_facs_growth_curve_data", LAYER, "modeling"
-    )
+    out = secure_query("SELECT val FROM modeling_facs_growth_curve_data", LAYER, "modeling")
     s = out.sql
     assert "EXISTS" in s.upper()
     assert "modeling_attr_info AS _perm" in s
