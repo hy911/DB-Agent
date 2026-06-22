@@ -64,6 +64,30 @@ def extract_genes_messages(question: str) -> list[dict[str, str]]:
     ]
 
 
+def analysis_messages(
+    question: str, columns: list[str], rows_preview: str
+) -> list[dict[str, str]]:
+    system = (
+        "You decide whether answering the user's question needs post-processing of "
+        "an already-fetched result set, and if so write ONE DuckDB SQL SELECT to do "
+        "it. The result set is a single in-memory table named `result` with the "
+        "given columns. If the rows already answer the question as-is, reply with "
+        "the single word NONE. Otherwise reply with exactly one SELECT over `result` "
+        "(aggregation / descriptive stats / pivot / correlation / quantiles), using "
+        "only the `result` table and no file or external functions. Reply with the "
+        "SQL or NONE and nothing else."
+    )
+    user = (
+        f"Question: {question}\n\n"
+        f"result columns: {', '.join(columns)}\n\n"
+        f"Sample rows:\n{rows_preview}"
+    )
+    return [
+        {"role": "system", "content": system},
+        {"role": "user", "content": user},
+    ]
+
+
 def answer_messages(question: str, sql: str, rows_preview: str) -> list[dict[str, str]]:
     user = f"Question: {question}\n\nSQL run:\n{sql}\n\nResult rows:\n{rows_preview}"
     return [

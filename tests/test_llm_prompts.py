@@ -56,3 +56,13 @@ def test_sql_system_prompt_is_domain_neutral():
     system = msgs[0]["content"].lower()
     assert "efficacy domain" not in system
     assert "select" in system  # still instructs a read-only SELECT
+
+
+def test_analysis_messages_include_columns_and_question():
+    from db_agent.llm.prompts import analysis_messages
+
+    msgs = analysis_messages("avg per group?", ["group_id", "tv"], "group_id, tv\nA, 1")
+    joined = " ".join(m["content"] for m in msgs)
+    assert "result" in joined.lower()
+    assert "group_id" in joined
+    assert "avg per group?" in joined

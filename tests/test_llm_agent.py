@@ -74,6 +74,37 @@ def test_extract_genes_none_returns_empty():
     assert extract_genes(_ScriptedClient("NONE"), SETTINGS, "how many models?") == []
 
 
+def test_analyze_sql_returns_sql():
+    from db_agent.llm.agent_llm import analyze_sql
+
+    c = _ScriptedClient("SELECT group_id, avg(tv) FROM result GROUP BY group_id")
+    qr = QueryResult(
+        columns=["group_id", "tv"],
+        rows=[{"group_id": "A", "tv": 1.0}],
+        rowcount=1,
+        truncated=False,
+        sql="SELECT ...",
+        elapsed_ms=1.0,
+    )
+    out = analyze_sql(c, SETTINGS, "avg per group?", qr)
+    assert out.lower().startswith("select")
+    assert c.last_model == "qwen-code"
+
+
+def test_analyze_sql_none_passthrough():
+    from db_agent.llm.agent_llm import analyze_sql
+
+    qr = QueryResult(
+        columns=["x"],
+        rows=[{"x": 1}],
+        rowcount=1,
+        truncated=False,
+        sql="s",
+        elapsed_ms=1.0,
+    )
+    assert analyze_sql(_ScriptedClient("NONE"), SETTINGS, "q", qr) == "NONE"
+
+
 def test_answer_uses_model_route_and_passes_through():
     c = _ScriptedClient("There are 3 models.")
     res = QueryResult(
