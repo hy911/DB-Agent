@@ -61,9 +61,7 @@ def generate_sql(
     return _strip_fences(text).strip()
 
 
-def analyze_sql(
-    client: LLMClient, settings: Settings, question: str, result: QueryResult
-) -> str:
+def analyze_sql(client: LLMClient, settings: Settings, question: str, result: QueryResult) -> str:
     msgs = prompts.analysis_messages(question, result.columns, _rows_preview(result))
     return _strip_fences(client.complete(settings.model_sql, msgs)).strip()
 

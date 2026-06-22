@@ -64,7 +64,7 @@ def test_query_answered_includes_rows():
     llm = _LLM(
         {
             "qwen-fast": ["efficacy"],
-            "qwen-code": ["SELECT drug_name FROM model_efficacy_info"],
+            "qwen-code": ["SELECT drug_name FROM model_efficacy_info", "NONE"],
             "qwen-main": ["Found 1 drug."],
         }
     )
@@ -94,7 +94,7 @@ def test_query_fatal_guard_error_is_200_error():
     llm = _LLM(
         {
             "qwen-fast": ["efficacy"],
-            "qwen-code": ["SELECT drug_name FROM model_efficacy_info"],
+            "qwen-code": ["SELECT drug_name FROM model_efficacy_info", "NONE"],
         }
     )
     replica = _Replica([GuardError("big_table_scan", "seq scan", retryable=False)])
@@ -122,7 +122,7 @@ def test_query_invokes_observer():
     llm = _LLM(
         {
             "qwen-fast": ["efficacy"],
-            "qwen-code": ["SELECT drug_name FROM model_efficacy_info"],
+            "qwen-code": ["SELECT drug_name FROM model_efficacy_info", "NONE"],
             "qwen-main": ["Found 1 drug."],
         }
     )

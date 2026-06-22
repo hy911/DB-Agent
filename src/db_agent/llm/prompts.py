@@ -64,9 +64,7 @@ def extract_genes_messages(question: str) -> list[dict[str, str]]:
     ]
 
 
-def analysis_messages(
-    question: str, columns: list[str], rows_preview: str
-) -> list[dict[str, str]]:
+def analysis_messages(question: str, columns: list[str], rows_preview: str) -> list[dict[str, str]]:
     system = (
         "You decide whether answering the user's question needs post-processing of "
         "an already-fetched result set, and if so write ONE DuckDB SQL SELECT to do "

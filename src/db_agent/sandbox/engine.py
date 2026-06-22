@@ -49,9 +49,7 @@ class DuckDBSandbox:
 
         con = duckdb.connect(":memory:", config={"enable_external_access": "false"})
         try:
-            coldefs = ", ".join(
-                f'"{c}" {_column_type([r.get(c) for r in rows])}' for c in columns
-            )
+            coldefs = ", ".join(f'"{c}" {_column_type([r.get(c) for r in rows])}' for c in columns)
             con.execute(f"CREATE TABLE result ({coldefs})")
             if rows:
                 placeholders = ", ".join("?" for _ in columns)

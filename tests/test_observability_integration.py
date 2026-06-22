@@ -45,7 +45,7 @@ def _happy_llm():
     return _LLM(
         {
             "qwen-fast": ["efficacy"],
-            "qwen-code": ["SELECT drug_name FROM model_efficacy_info"],
+            "qwen-code": ["SELECT drug_name FROM model_efficacy_info", "NONE"],
             "qwen-main": ["Found 1 drug."],
         }
     )
