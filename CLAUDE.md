@@ -91,6 +91,17 @@ Done:
   canonical symbol (case-sensitive exact + pg_trgm fuzzy as clarify-only
   candidates).
 - **observability**: optional per-run JSONL log (`DBAGENT_OBSERVABILITY_LOG_PATH`).
+- **DuckDB result-post-processing sandbox** (Phase 1; added 2026-06-18,
+  live-verified + SQL-security-reviewed). `sandbox/` is the only DuckDB boundary;
+  the graph runs `execute → analyze → answer`, where `analyze` lets the LLM
+  optionally emit ONE DuckDB `SELECT` over the result set (table `result`) for
+  descriptive stats / reshaping / correlations. **Locked down**: in-memory +
+  `enable_external_access=false` + a sqlglot SELECT-only validator (only `result`,
+  no file/network/attach funcs incl. the dedicated `read_csv`/`read_parquet`
+  nodes) + the sandbox only ever sees already-permission-filtered rows + **fail-
+  soft** (any GuardError → degrade to the raw-result answer). Injected via
+  `Deps.run_sandbox`. Phase 2 (real statistical inference: t-test / ANOVA / KM via
+  a vetted function set) is a **separate** future spec, NOT built.
 
 `resolve_gene` is now **wired into the question flow** (Plan B, executed
 2026-06-18, live-verified): a gene-bearing domain (`is_gene_bearing`) routes
@@ -100,11 +111,12 @@ sql-gen context; any ambiguous/unknown short-circuits to clarify. The resolver i
 injected via `Deps.resolve_gene` (default = real `db.resolve_gene`) so the graph
 stays offline-testable. Design specs + plans live under `docs/superpowers/`.
 
-Still deferred (do not build until asked): `modeling_panel_data` (needs a
-permission-grain decision, see above), pgvector example retrieval, stats sandbox,
-DuckDB, LLM gateway
-retry/backoff (a real gap — a live answer-node call hit a transient 504 during
-mutation e2e).
+Still deferred (do not build until asked): **stats sandbox Phase 2** (real
+statistical inference — t-test / ANOVA / KM survival via a vetted function set, its
+own security design), **pgvector example retrieval** (few-shot from the
+observability log), `modeling_panel_data` (needs a permission-grain decision, see
+above), and **LLM gateway retry/backoff** (a real gap — live answer-node calls hit
+transient 504s during mutation, modeling, and sandbox e2e).
 
 ### Permission policy (Phase 1, confirmed with the user)
 
