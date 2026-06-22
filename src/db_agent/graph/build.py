@@ -16,11 +16,11 @@ from db_agent.config import Settings
 from db_agent.db import GeneResolution, ReadReplica
 from db_agent.db.result import QueryResult
 from db_agent.graph import nodes
-from db_agent.sandbox.stats import StatResult
 from db_agent.graph.state import AgentResult, AgentState, Deps, initial_state, to_result
 from db_agent.llm.client import LLMClient
 from db_agent.observability.observer import Observer
 from db_agent.observability.record import RunRecord
+from db_agent.sandbox.stats import StatResult
 from db_agent.semantic.model import SemanticLayer
 
 

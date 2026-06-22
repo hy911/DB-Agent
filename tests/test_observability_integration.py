@@ -45,7 +45,7 @@ def _happy_llm():
     return _LLM(
         {
             "qwen-fast": ["efficacy"],
-            "qwen-code": ["SELECT drug_name FROM model_efficacy_info", "NONE"],
+            "qwen-code": ["SELECT drug_name FROM model_efficacy_info", "NONE", "NONE"],
             "qwen-main": ["Found 1 drug."],
         }
     )
@@ -92,3 +92,47 @@ def test_observer_failure_does_not_break_the_run():
     )
     assert res.status == "answered"
     assert res.answer == "Found 1 drug."
+
+
+def test_record_captures_stat_request():
+    records: list[RunRecord] = []
+    llm = _LLM(
+        {
+            "qwen-fast": ["efficacy"],
+            "qwen-code": [
+                "SELECT group_id, tgi_tv FROM model_efficacy_info",
+                "NONE",  # analyze
+                '{"function": "one_way_anova", "params": {"value": "tgi_tv", "group": "group_id"}}',
+            ],
+            "qwen-main": ["Groups differ."],
+        }
+    )
+    raw = QueryResult(
+        columns=["group_id", "tgi_tv"],
+        rows=[
+            {"group_id": g, "tgi_tv": v}
+            for g, v in [
+                ("A", 1.0),
+                ("A", 2.0),
+                ("B", 5.0),
+                ("B", 6.0),
+                ("C", 9.0),
+                ("C", 10.0),
+            ]
+        ],
+        rowcount=6,
+        truncated=False,
+        sql="SELECT group_id, tgi_tv",
+        elapsed_ms=1.0,
+    )
+    run_agent(
+        "do groups differ?",
+        llm=llm,
+        replica=_Replica([raw]),
+        layer=LAYER,
+        settings=SETTINGS,
+        observer=records.append,
+    )
+    assert len(records) == 1
+    assert records[0].stat_request is not None
+    assert "one_way_anova" in records[0].stat_request

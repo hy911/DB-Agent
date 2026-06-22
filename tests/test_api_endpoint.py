@@ -64,7 +64,7 @@ def test_query_answered_includes_rows():
     llm = _LLM(
         {
             "qwen-fast": ["efficacy"],
-            "qwen-code": ["SELECT drug_name FROM model_efficacy_info", "NONE"],
+            "qwen-code": ["SELECT drug_name FROM model_efficacy_info", "NONE", "NONE"],
             "qwen-main": ["Found 1 drug."],
         }
     )
@@ -122,7 +122,7 @@ def test_query_invokes_observer():
     llm = _LLM(
         {
             "qwen-fast": ["efficacy"],
-            "qwen-code": ["SELECT drug_name FROM model_efficacy_info", "NONE"],
+            "qwen-code": ["SELECT drug_name FROM model_efficacy_info", "NONE", "NONE"],
             "qwen-main": ["Found 1 drug."],
         }
     )

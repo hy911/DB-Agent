@@ -105,7 +105,7 @@ def one_way_anova(rows, params) -> StatResult:
     return StatResult(
         test="one_way_anova",
         stats={"f": float(f), "p_value": float(p)},
-        groups=[{"label": l, "n": len(v), "mean": fmean(v)} for l, v in sorted(groups.items())],
+        groups=[{"label": lab, "n": len(v), "mean": fmean(v)} for lab, v in sorted(groups.items())],
         caveats=caveats,
     )
 
