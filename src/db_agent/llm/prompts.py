@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
+    from db_agent.examples.model import Example
     from db_agent.semantic.model import Domain
 
 _SQL_SYSTEM = (
@@ -47,9 +48,18 @@ def route_messages(question: str, domains: list[Domain]) -> list[dict[str, str]]
 
 
 def sql_messages(
-    question: str, context: str, prior_error: str | None = None
+    question: str,
+    context: str,
+    prior_error: str | None = None,
+    examples: list[Example] | None = None,
 ) -> list[dict[str, str]]:
     user = f"Schema context:\n{context}\n\nQuestion: {question}"
+    if examples:
+        shots = "\n".join(f"Q: {e.question}\nSQL: {e.sql}" for e in examples)
+        user += (
+            "\n\nHere are similar past questions and the SQL that answered them "
+            "(reference only — adapt to the current question and schema):\n" + shots
+        )
     if prior_error is not None:
         user += f"\n\nPrevious attempt failed with this database error; fix the SQL:\n{prior_error}"
     return [

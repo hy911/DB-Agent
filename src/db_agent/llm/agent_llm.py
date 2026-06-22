@@ -17,6 +17,7 @@ from db_agent.llm.client import LLMClient
 from db_agent.sandbox.stats.spec import StatResult
 
 if TYPE_CHECKING:
+    from db_agent.examples.model import Example
     from db_agent.semantic.model import Domain
 
 _CLARIFY_FALLBACK = "Could you clarify or rephrase your question?"
@@ -57,8 +58,11 @@ def generate_sql(
     question: str,
     context: str,
     prior_error: str | None = None,
+    examples: list[Example] | None = None,
 ) -> str:
-    text = client.complete(settings.model_sql, prompts.sql_messages(question, context, prior_error))
+    text = client.complete(
+        settings.model_sql, prompts.sql_messages(question, context, prior_error, examples)
+    )
     return _strip_fences(text).strip()
 
 

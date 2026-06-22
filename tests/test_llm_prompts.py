@@ -87,3 +87,24 @@ def test_analysis_messages_defer_inferential_stats():
     system = msgs[0]["content"].lower()
     assert "p-value" in system or "p value" in system  # names what NOT to compute here
     assert "none" in system  # tells it to defer (reply NONE) for a statistical test
+
+
+def test_sql_messages_include_examples_block():
+    from db_agent.examples.model import Example
+    from db_agent.llm.prompts import sql_messages
+
+    examples = [
+        Example("how many models?", "SELECT count(*) FROM model_efficacy_info", "efficacy")
+    ]
+    msgs = sql_messages("list drugs", "ctx", examples=examples)
+    joined = " ".join(m["content"] for m in msgs)
+    assert "how many models?" in joined
+    assert "SELECT count(*) FROM model_efficacy_info" in joined
+
+
+def test_sql_messages_no_examples_block_when_empty():
+    from db_agent.llm.prompts import sql_messages
+
+    msgs = sql_messages("list drugs", "ctx", examples=[])
+    joined = " ".join(m["content"] for m in msgs)
+    assert "similar past questions" not in joined.lower()
