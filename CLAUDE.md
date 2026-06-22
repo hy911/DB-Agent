@@ -79,12 +79,14 @@ Done:
   source changes) — proof the data-driven extension path works.
 - **modeling** domain (PDX/CDX 建模 characterization; **access-controlled**; added
   2026-06-18, live-verified + SQL-security-reviewed). Hub `modeling_attr_info`
-  (`for_bd='yes'`) + 3 detail tables (tumor_volume / body_weight / survival)
-  filtered by `EXISTS` semi-join on `(model_uuid, model_no, group_id)`. Added as a
-  **pure `semantic_layer.yaml` change** (zero source changes) — the **first
+  (`for_bd='yes'`) + **8 detail tables** (tumor_volume / body_weight / survival,
+  then facs / avg_radiance / total_flux / elisa / pathology added 2026-06-18 batch
+  2) filtered by `EXISTS` semi-join on `(model_uuid, model_no, group_id)`. Added as
+  a **pure `semantic_layer.yaml` change** (zero source changes) — the **first
   access-controlled domain added via config**, exercising the real permission-
-  injection path (not the no-op). The remaining modeling detail tables (facs /
-  imaging / elisa / panel / pathology) are addable later, same pattern.
+  injection path (not the no-op). `modeling_panel_data` is intentionally excluded
+  (no `group_id` → can't use the 3-key semi-join without coarsening the permission
+  grain; revisit only with an explicit grain decision).
 - **resolve_gene** tool (`db/gene_resolver.py`): deterministic gene-name →
   canonical symbol (case-sensitive exact + pg_trgm fuzzy as clarify-only
   candidates).
@@ -98,9 +100,9 @@ sql-gen context; any ambiguous/unknown short-circuits to clarify. The resolver i
 injected via `Deps.resolve_gene` (default = real `db.resolve_gene`) so the graph
 stays offline-testable. Design specs + plans live under `docs/superpowers/`.
 
-Still deferred (do not build until asked): the remaining **modeling** detail
-tables (facs / imaging / elisa / panel / pathology — same pattern, zero code),
-pgvector example retrieval, stats sandbox, DuckDB, LLM gateway
+Still deferred (do not build until asked): `modeling_panel_data` (needs a
+permission-grain decision, see above), pgvector example retrieval, stats sandbox,
+DuckDB, LLM gateway
 retry/backoff (a real gap — a live answer-node call hit a transient 504 during
 mutation e2e).
 
