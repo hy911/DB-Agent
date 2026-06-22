@@ -66,3 +66,24 @@ def test_analysis_messages_include_columns_and_question():
     assert "result" in joined.lower()
     assert "group_id" in joined
     assert "avg per group?" in joined
+
+
+def test_sql_system_steers_inferential_stats_to_system():
+    msgs = sql_messages("q", "ctx")
+    system = msgs[0]["content"].lower()
+    # must forbid computing test statistics / p-values in SQL ...
+    assert "p-value" in system or "p value" in system
+    assert "raw" in system  # ... and ask for the raw rows instead
+    # ... while still allowing plain descriptive aggregation
+    assert "group by" in system or "aggregation" in system
+
+
+def test_analysis_messages_defer_inferential_stats():
+    from db_agent.llm.prompts import analysis_messages
+
+    msgs = analysis_messages(
+        "is the difference significant?", ["group_id", "tv"], "group_id, tv\nA, 1"
+    )
+    system = msgs[0]["content"].lower()
+    assert "p-value" in system or "p value" in system  # names what NOT to compute here
+    assert "none" in system  # tells it to defer (reply NONE) for a statistical test

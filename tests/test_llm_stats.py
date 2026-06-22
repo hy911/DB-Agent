@@ -41,6 +41,17 @@ def test_request_stat_none():
     assert request_stat(llm, SETTINGS, "q", ["g"], "p", catalog_text()) == "NONE"
 
 
+def test_stat_messages_encourage_emitting_when_significance_asked():
+    from db_agent.llm.prompts import stat_messages
+
+    msgs = stat_messages(
+        "is A vs B significant?", ["group_id", "tv"], "group_id, tv\nA, 1", catalog_text()
+    )
+    system = msgs[0]["content"].lower()
+    assert "significan" in system  # nudges emitting a test when significance is asked
+    assert "p-value" in system or "p value" in system
+
+
 def test_answer_stat_formats_and_routes():
     stat = StatResult(
         test="welch_t_test",
