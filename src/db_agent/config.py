@@ -60,6 +60,14 @@ class Settings(BaseSettings):
         default="qwen-code",
         validation_alias=AliasChoices("DBAGENT_MODEL_SQL", "MODEL_CODE"),
     )
+    model_embed: str = Field(  # question embedding for example retrieval
+        default="qwen-embedding",
+        validation_alias=AliasChoices("DBAGENT_MODEL_EMBED", "MODEL_EMBED"),
+    )
+
+    # --- few-shot example retrieval (off until an index path is set) ---
+    example_index_path: Path | None = None
+    example_top_k: int = 3
     # Qwen3 models default to "thinking" mode and emit long reasoning before the
     # answer — for routing / SQL-gen / answer that just burns latency and makes the
     # gateway 504 on the upstream timeout. Disable it by default (these are

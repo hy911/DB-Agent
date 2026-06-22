@@ -16,6 +16,7 @@ dependencies = [
     "pydantic-settings>=2.5",
     "scipy>=1.13",
     "lifelines>=0.29",
+    "numpy>=1.26",
 ]
 
 [project.optional-dependencies]
