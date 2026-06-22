@@ -93,9 +93,7 @@ def test_sql_messages_include_examples_block():
     from db_agent.examples.model import Example
     from db_agent.llm.prompts import sql_messages
 
-    examples = [
-        Example("how many models?", "SELECT count(*) FROM model_efficacy_info", "efficacy")
-    ]
+    examples = [Example("how many models?", "SELECT count(*) FROM model_efficacy_info", "efficacy")]
     msgs = sql_messages("list drugs", "ctx", examples=examples)
     joined = " ".join(m["content"] for m in msgs)
     assert "how many models?" in joined

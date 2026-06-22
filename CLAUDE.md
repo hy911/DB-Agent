@@ -137,12 +137,27 @@ gateway's upstream timeout. `LiteLLMClient` now sends
 t-test fired through the stats node: t=-19.84, p=1.75e-53, per-group n/means + normality
 caveat, on for_bd-filtered rows).
 
-Still deferred (do not build until asked): **pgvector example retrieval** (few-shot
-from the observability log), `modeling_panel_data` (needs a permission-grain
-decision, see above), and **LLM gateway retry/backoff** (nice-to-have now that the
-504 root cause is fixed — still worth adding for genuine transient blips). Future
-stats tests (two-way ANOVA, post-hoc, Cox regression)
-are pure `sandbox/stats/registry.py` additions once asked.
+**Few-shot example retrieval built (2026-06-22, off by default).** New `examples/`
+package: an offline CLI (`python -m db_agent.examples.build <obs.jsonl> <out.npz>`)
+ingests the observability log, keeps `status=="answered"` runs, dedups, embeds each
+`question` via `qwen-embedding`, and writes a local `.npz` vector index (NOT in the
+read-only replica). A new `retrieve_examples` node (`assemble_context →
+retrieve_examples → generate_sql`) embeds the incoming question, does cosine top-k
+over the **same-domain** examples, and injects the `(question → raw_sql)` pairs into
+`sql_messages` as few-shot reference. **Uses `raw_sql`, never the secured SQL** — so
+examples never teach the model to write permission filters (those stay deterministic).
+**Off until `Settings.example_index_path` is set** (default None → no-op retriever,
+zero extra calls); **fail-soft** (missing/corrupt index or embed failure → no
+examples, generation proceeds as before). Embedding seam is `llm/embedding.py`
+(`LiteLLMEmbeddingClient`), injected via `Deps.retrieve_examples`. `qwen-reranker`
+two-stage rerank is the deferred follow-up.
+
+Still deferred (do not build until asked): `modeling_panel_data` (needs a
+permission-grain decision, see above), **LLM gateway retry/backoff** (nice-to-have now
+that the 504 root cause is fixed — still worth adding for genuine transient blips),
+`qwen-reranker` rerank stage for example retrieval, and more stats tests (two-way
+ANOVA, post-hoc, Cox regression) — pure `sandbox/stats/registry.py` additions once
+asked.
 
 ### Permission policy (Phase 1, confirmed with the user)
 
@@ -171,14 +186,18 @@ src/db_agent/
   db/              # the ONLY I/O boundary: replica.py (pool + execute + fetch),
                    #   explain.py, mapping.py, result.py, gene_resolver.py
   llm/             # LiteLLM client + prompts + tasks (route / generate_sql /
-                   #   answer / extract_genes / analyze_sql)
+                   #   answer / extract_genes / analyze_sql / request_stat /
+                   #   answer_stat); embedding.py (LiteLLMEmbeddingClient)
+  examples/        # few-shot example retrieval: model.py (Example), store.py (local
+                   #   .npz cosine index), build.py (offline builder + CLI),
+                   #   retriever.py (request-time embed+search; off by default)
   sandbox/         # the ONLY DuckDB boundary: validator.py (analysis-SQL guard),
                    #   engine.py (locked-down in-memory DuckDBSandbox.run);
                    #   stats/ (Phase 2: vetted t-test/ANOVA/KM registry + validator
                    #   + runner, LLM emits {function,params} data, never code)
   graph/           # LangGraph: state.py (AgentState, Deps), nodes.py, build.py.
-                   #   Flow: route → [extract→resolve] → assemble → generate_sql →
-                   #   guard → execute → analyze → stats → answer
+                   #   Flow: route → [extract→resolve] → assemble → retrieve_examples
+                   #   → generate_sql → guard → execute → analyze → stats → answer
   api/             # FastAPI: app.py (create_app, POST /query, GET /health)
   observability/   # RunRecord + JsonlObserver (optional per-run logging)
 tests/             # offline default (no DB/LLM); tests/integration/ is -m integration

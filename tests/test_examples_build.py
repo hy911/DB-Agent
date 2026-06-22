@@ -9,7 +9,12 @@ from db_agent.examples.store import ExampleStore
 def _write_log(path):
     rows = [
         {"status": "answered", "domain": "efficacy", "question": "q1", "raw_sql": "SELECT 1"},
-        {"status": "answered", "domain": "efficacy", "question": "q1", "raw_sql": "SELECT 1"},  # dup
+        {
+            "status": "answered",
+            "domain": "efficacy",
+            "question": "q1",
+            "raw_sql": "SELECT 1",
+        },  # dup
         {"status": "error", "domain": "efficacy", "question": "qbad", "raw_sql": "SELECT x"},
         {"status": "answered", "domain": "expression", "question": "q2", "raw_sql": None},  # no sql
         {"status": "answered", "domain": "mutation", "question": "q3", "raw_sql": "SELECT 3"},
