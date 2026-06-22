@@ -15,6 +15,7 @@ from langgraph.graph import END, START, StateGraph
 from db_agent.config import Settings
 from db_agent.db import GeneResolution, ReadReplica
 from db_agent.db.result import QueryResult
+from db_agent.examples.retriever import Retriever
 from db_agent.graph import nodes
 from db_agent.graph.state import AgentResult, AgentState, Deps, initial_state, to_result
 from db_agent.llm.client import LLMClient
@@ -30,6 +31,7 @@ def build_graph(deps: Deps):
     g.add_node("extract_genes", partial(nodes.extract_genes_node, deps=deps))
     g.add_node("resolve_genes", partial(nodes.resolve_genes_node, deps=deps))
     g.add_node("assemble_context", partial(nodes.assemble_context_node, deps=deps))
+    g.add_node("retrieve_examples", partial(nodes.retrieve_examples_node, deps=deps))
     g.add_node("generate_sql", partial(nodes.generate_sql_node, deps=deps))
     g.add_node("guard", partial(nodes.guard_node, deps=deps))
     g.add_node("execute", partial(nodes.execute_node, deps=deps))
@@ -45,7 +47,8 @@ def build_graph(deps: Deps):
     )
     g.add_edge("extract_genes", "resolve_genes")
     g.add_conditional_edges("resolve_genes", nodes.after_resolve, ["assemble_context", END])
-    g.add_edge("assemble_context", "generate_sql")
+    g.add_edge("assemble_context", "retrieve_examples")
+    g.add_edge("retrieve_examples", "generate_sql")
     g.add_edge("generate_sql", "guard")
     g.add_conditional_edges("guard", nodes.after_guard, ["execute", "generate_sql", END])
     g.add_conditional_edges("execute", nodes.after_execute, ["analyze", "generate_sql", END])
@@ -66,6 +69,7 @@ def run_agent(
     resolve_gene: Callable[[ReadReplica, str], GeneResolution] | None = None,
     run_sandbox: Callable[[list[str], list[dict[str, object]], str], QueryResult] | None = None,
     run_stat: Callable[[list[str], list[dict[str, object]], str], StatResult] | None = None,
+    retrieve_examples: Retriever | None = None,
 ) -> AgentResult:
     deps_kwargs = {"llm": llm, "replica": replica, "layer": layer, "settings": settings}
     if resolve_gene is not None:
@@ -74,6 +78,8 @@ def run_agent(
         deps_kwargs["run_sandbox"] = run_sandbox
     if run_stat is not None:
         deps_kwargs["run_stat"] = run_stat
+    if retrieve_examples is not None:
+        deps_kwargs["retrieve_examples"] = retrieve_examples
     deps = Deps(**deps_kwargs)
     graph = build_graph(deps)
     final = graph.invoke(initial_state(question))

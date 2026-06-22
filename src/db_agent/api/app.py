@@ -16,6 +16,7 @@ from fastapi import APIRouter, FastAPI, HTTPException, Request
 from db_agent.api.schemas import QueryRequest, QueryResponse, ResultRows
 from db_agent.config import get_settings
 from db_agent.db import ReadReplica
+from db_agent.examples.retriever import default_retriever
 from db_agent.graph import run_agent
 from db_agent.graph.state import AgentResult, Deps
 from db_agent.llm import LiteLLMClient
@@ -79,6 +80,7 @@ def create_app(deps: Deps | None = None, observer: Observer | None = None) -> Fa
                 replica=replica,
                 layer=load_semantic_layer(s.semantic_layer_path),
                 settings=s,
+                retrieve_examples=default_retriever(s),
             )
             app.state.observer = (
                 JsonlObserver(s.observability_log_path)

@@ -72,9 +72,18 @@ def assemble_context_node(state: AgentState, deps: Deps) -> dict:
     return {"context": _render_context(deps, state["domain"], state["resolved_genes"])}
 
 
+def retrieve_examples_node(state: AgentState, deps: Deps) -> dict:
+    return {"examples": deps.retrieve_examples(state["domain"], state["question"])}
+
+
 def generate_sql_node(state: AgentState, deps: Deps) -> dict:
     sql = llm_generate_sql(
-        deps.llm, deps.settings, state["question"], state["context"], state["last_error"]
+        deps.llm,
+        deps.settings,
+        state["question"],
+        state["context"],
+        state["last_error"],
+        state["examples"],
     )
     return {"sql": sql, "attempts": state["attempts"] + 1}
 

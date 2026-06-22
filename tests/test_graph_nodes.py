@@ -18,6 +18,7 @@ from db_agent.graph.nodes import (
     generate_sql_node,
     guard_node,
     resolve_genes_node,
+    retrieve_examples_node,
     route_node,
     stats_node,
 )
@@ -168,6 +169,44 @@ def test_route_expression_sets_domain():
     deps = _deps(llm=_LLM({"qwen-fast": ["expression"]}))
     out = route_node(initial_state("TP53 expression?"), deps)
     assert out["domain"] == "expression"
+
+
+def test_retrieve_examples_node_injects():
+    from db_agent.examples.model import Example
+
+    hit = Example("past q", "SELECT 1", "efficacy")
+    deps = _deps()
+    object.__setattr__(deps, "retrieve_examples", lambda domain, q: [hit])
+    s = initial_state("q")
+    s["domain"] = "efficacy"
+    out = retrieve_examples_node(s, deps)
+    assert out["examples"] == [hit]
+
+
+def test_retrieve_examples_node_default_is_empty():
+    deps = _deps()  # default Deps.retrieve_examples is the no-op
+    s = initial_state("q")
+    s["domain"] = "efficacy"
+    assert retrieve_examples_node(s, deps) == {"examples": []}
+
+
+def test_generate_sql_forwards_examples():
+    from db_agent.examples.model import Example
+
+    captured = {}
+
+    class _LLM2:
+        def complete(self, model, messages):
+            captured["joined"] = " ".join(m["content"] for m in messages)
+            return "SELECT 1"
+
+    deps = _deps(llm=_LLM2())
+    object.__setattr__(deps, "retrieve_examples", lambda d, q: [])
+    s = initial_state("q")
+    s["context"] = "ctx"
+    s["examples"] = [Example("past q", "SELECT 42", "efficacy")]
+    generate_sql_node(s, deps)
+    assert "SELECT 42" in captured["joined"]  # example reached the prompt
 
 
 def test_generate_sql_increments_attempts():

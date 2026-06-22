@@ -274,6 +274,28 @@ def test_analysis_end_to_end_runs_sandbox():
     assert res.analysis_sql is not None and "avg" in res.analysis_sql.lower()
 
 
+def test_examples_injected_end_to_end():
+    from db_agent.examples.model import Example
+
+    llm = _LLM(
+        {
+            "qwen-fast": ["efficacy"],
+            "qwen-code": ["SELECT drug_name FROM model_efficacy_info", "NONE", "NONE"],
+            "qwen-main": ["Found 1 drug."],
+        }
+    )
+    hit = Example("how many?", "SELECT count(*) FROM model_efficacy_info", "efficacy")
+    res = run_agent(
+        "list drugs for BD",
+        llm=llm,
+        replica=_Replica([_qr()]),
+        layer=LAYER,
+        settings=SETTINGS,
+        retrieve_examples=lambda domain, q: [hit],
+    )
+    assert res.status == "answered"
+
+
 def test_stats_end_to_end_runs_test():
     llm = _LLM(
         {

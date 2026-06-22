@@ -9,6 +9,8 @@ from typing import TypedDict
 from db_agent.config import Settings
 from db_agent.db import GeneResolution, QueryResult, ReadReplica
 from db_agent.db import resolve_gene as _default_resolve_gene
+from db_agent.examples.model import Example
+from db_agent.examples.retriever import Retriever, _no_examples
 from db_agent.llm.client import LLMClient
 from db_agent.sandbox.engine import DuckDBSandbox
 from db_agent.sandbox.stats import StatResult
@@ -24,6 +26,7 @@ class AgentState(TypedDict):
     context: str | None
     extracted_genes: list[str]
     resolved_genes: dict[str, str]
+    examples: list[Example]
     sql: str | None
     secured_sql: str | None
     needs_explain: bool
@@ -50,6 +53,7 @@ def initial_state(question: str) -> AgentState:
         context=None,
         extracted_genes=[],
         resolved_genes={},
+        examples=[],
         sql=None,
         secured_sql=None,
         needs_explain=False,
@@ -106,3 +110,4 @@ class Deps:
         _default_run_sandbox
     )
     run_stat: Callable[[list[str], list[dict[str, object]], str], StatResult] = _default_run_stat
+    retrieve_examples: Retriever = _no_examples
