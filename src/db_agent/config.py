@@ -60,6 +60,11 @@ class Settings(BaseSettings):
         default="qwen-code",
         validation_alias=AliasChoices("DBAGENT_MODEL_SQL", "MODEL_CODE"),
     )
+    # Qwen3 models default to "thinking" mode and emit long reasoning before the
+    # answer — for routing / SQL-gen / answer that just burns latency and makes the
+    # gateway 504 on the upstream timeout. Disable it by default (these are
+    # deterministic, non-CoT tasks); flip to True only if a thinking path is wanted.
+    llm_enable_thinking: bool = False
 
 
 @lru_cache

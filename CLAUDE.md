@@ -127,11 +127,21 @@ sql-gen context; any ambiguous/unknown short-circuits to clarify. The resolver i
 injected via `Deps.resolve_gene` (default = real `db.resolve_gene`) so the graph
 stays offline-testable. Design specs + plans live under `docs/superpowers/`.
 
+**Gateway 504 root cause FOUND + FIXED (2026-06-22):** the chronic "transient" 504s
+were NOT a flaky gateway — the Qwen3 models default to **thinking mode**, emitting
+long reasoning before the answer, which on heavier prompts (SQL-gen) blows past the
+gateway's upstream timeout. `LiteLLMClient` now sends
+`extra_body={"chat_template_kwargs": {"enable_thinking": False}}` (toggle via
+`Settings.llm_enable_thinking`, default False). qwen-code SQL-gen dropped from
+504-timeout to ~2.6s; **full stats Phase 2 chain live-verified end-to-end** (Welch
+t-test fired through the stats node: t=-19.84, p=1.75e-53, per-group n/means + normality
+caveat, on for_bd-filtered rows).
+
 Still deferred (do not build until asked): **pgvector example retrieval** (few-shot
 from the observability log), `modeling_panel_data` (needs a permission-grain
-decision, see above), and **LLM gateway retry/backoff** (a real gap — live
-answer-node/generate-sql calls hit transient 504s during mutation, modeling, sandbox,
-and stats Phase 2 e2e). Future stats tests (two-way ANOVA, post-hoc, Cox regression)
+decision, see above), and **LLM gateway retry/backoff** (nice-to-have now that the
+504 root cause is fixed — still worth adding for genuine transient blips). Future
+stats tests (two-way ANOVA, post-hoc, Cox regression)
 are pure `sandbox/stats/registry.py` additions once asked.
 
 ### Permission policy (Phase 1, confirmed with the user)
