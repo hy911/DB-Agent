@@ -7,6 +7,8 @@ columns; ``run_stat`` dispatches to a hand-written impl that calls scipy/lifelin
 
 from __future__ import annotations
 
+from db_agent.sandbox.stats.registry import REGISTRY, catalog_text
+from db_agent.sandbox.stats.runner import run_stat
 from db_agent.sandbox.stats.spec import (
     ParamSpec,
     StatResult,
@@ -16,9 +18,12 @@ from db_agent.sandbox.stats.spec import (
 from db_agent.sandbox.stats.validator import validate_stat_request
 
 __all__ = [
+    "REGISTRY",
     "ParamSpec",
     "StatResult",
     "StatTest",
     "ValidatedStatRequest",
+    "catalog_text",
+    "run_stat",
     "validate_stat_request",
 ]
