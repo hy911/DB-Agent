@@ -6,8 +6,10 @@ from db_agent.llm.agent_llm import (
     RouteResult,
     analyze_sql,
     answer,
+    answer_stat,
     extract_genes,
     generate_sql,
+    request_stat,
     route,
 )
 from db_agent.llm.client import LiteLLMClient, LLMClient
@@ -18,7 +20,9 @@ __all__ = [
     "RouteResult",
     "analyze_sql",
     "answer",
+    "answer_stat",
     "extract_genes",
     "generate_sql",
+    "request_stat",
     "route",
 ]

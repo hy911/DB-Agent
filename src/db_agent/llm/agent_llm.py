@@ -14,6 +14,7 @@ from db_agent.config import Settings
 from db_agent.db import QueryResult
 from db_agent.llm import prompts
 from db_agent.llm.client import LLMClient
+from db_agent.sandbox.stats.spec import StatResult
 
 if TYPE_CHECKING:
     from db_agent.semantic.model import Domain
@@ -64,6 +65,43 @@ def generate_sql(
 def analyze_sql(client: LLMClient, settings: Settings, question: str, result: QueryResult) -> str:
     msgs = prompts.analysis_messages(question, result.columns, _rows_preview(result))
     return _strip_fences(client.complete(settings.model_sql, msgs)).strip()
+
+
+def request_stat(
+    client: LLMClient,
+    settings: Settings,
+    question: str,
+    columns: list[str],
+    rows_preview: str,
+    catalog: str,
+) -> str:
+    msgs = prompts.stat_messages(question, columns, rows_preview, catalog)
+    return _strip_fences(client.complete(settings.model_sql, msgs)).strip()
+
+
+def answer_stat(
+    client: LLMClient,
+    settings: Settings,
+    question: str,
+    sql: str,
+    analysis_sql: str | None,
+    stat: StatResult,
+) -> str:
+    summary = _format_stat(stat)
+    return client.complete(
+        settings.model_route, prompts.stat_answer_messages(question, sql, analysis_sql, summary)
+    ).strip()
+
+
+def _format_stat(stat: StatResult) -> str:
+    lines = [f"Test: {stat.test}"]
+    if stat.stats:
+        lines.append("Statistics: " + ", ".join(f"{k}={v:.4g}" for k, v in stat.stats.items()))
+    for g in stat.groups:
+        lines.append("Group: " + ", ".join(f"{k}={v}" for k, v in g.items()))
+    if stat.caveats:
+        lines.append("Caveats: " + " ".join(stat.caveats))
+    return "\n".join(lines)
 
 
 def answer(

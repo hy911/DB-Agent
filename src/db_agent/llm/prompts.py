@@ -86,6 +86,51 @@ def analysis_messages(question: str, columns: list[str], rows_preview: str) -> l
     ]
 
 
+def stat_messages(
+    question: str, columns: list[str], rows_preview: str, catalog: str
+) -> list[dict[str, str]]:
+    system = (
+        "You decide whether answering the question needs a statistical test over an "
+        "already-fetched result table named `result`. If so, pick ONE test from the "
+        "catalog and map its parameters to the table's columns. Available tests:\n"
+        f"{catalog}\n\n"
+        "If a test is appropriate, reply with exactly one JSON object: "
+        '{"function": <name>, "params": {<param>: <column-name-or-scalar>, ...}}. '
+        "Map column-typed params to column names from the table; use only those "
+        "columns. If no statistical test is needed, reply with the single word NONE. "
+        "Reply with the JSON object or NONE and nothing else."
+    )
+    user = (
+        f"Question: {question}\n\n"
+        f"result columns: {', '.join(columns)}\n\n"
+        f"Sample rows:\n{rows_preview}"
+    )
+    return [
+        {"role": "system", "content": system},
+        {"role": "user", "content": user},
+    ]
+
+
+def stat_answer_messages(
+    question: str, sql: str, analysis_sql: str | None, stat_summary: str
+) -> list[dict[str, str]]:
+    system = (
+        "You answer the user's question in natural language using a statistical test "
+        "result. State the test used, the key statistic and p-value, the per-group "
+        "figures, and clearly convey the caveats about assumptions. Be concise and "
+        "factual; do not overstate significance."
+    )
+    reshape = f"\n\nReshape SQL:\n{analysis_sql}" if analysis_sql else ""
+    user = (
+        f"Question: {question}\n\nSQL run:\n{sql}{reshape}\n\n"
+        f"Statistical test result:\n{stat_summary}"
+    )
+    return [
+        {"role": "system", "content": system},
+        {"role": "user", "content": user},
+    ]
+
+
 def answer_messages(question: str, sql: str, rows_preview: str) -> list[dict[str, str]]:
     user = f"Question: {question}\n\nSQL run:\n{sql}\n\nResult rows:\n{rows_preview}"
     return [
