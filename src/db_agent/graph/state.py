@@ -10,7 +10,10 @@ from db_agent.config import Settings
 from db_agent.db import GeneResolution, QueryResult, ReadReplica
 from db_agent.db import resolve_gene as _default_resolve_gene
 from db_agent.llm.client import LLMClient
+from db_agent.sandbox.engine import DuckDBSandbox
 from db_agent.semantic.model import SemanticLayer
+
+_default_run_sandbox = DuckDBSandbox().run
 
 
 class AgentState(TypedDict):
@@ -28,6 +31,8 @@ class AgentState(TypedDict):
     last_error: str | None
     outcome: str  # "" | "ok" | "retry" | "fatal"
     result: QueryResult | None
+    analysis: QueryResult | None
+    analysis_sql: str | None
     answer: str | None
     clarification: str | None
     status: str  # running | answered | clarify | error
@@ -50,6 +55,8 @@ def initial_state(question: str) -> AgentState:
         last_error=None,
         outcome="",
         result=None,
+        analysis=None,
+        analysis_sql=None,
         answer=None,
         clarification=None,
         status="running",
@@ -62,6 +69,7 @@ class AgentResult:
     status: str
     answer: str | None
     sql: str | None
+    analysis_sql: str | None
     clarification: str | None
     error: str | None
     result: QueryResult | None
@@ -72,6 +80,7 @@ def to_result(state: AgentState) -> AgentResult:
         status=state["status"],
         answer=state.get("answer"),
         sql=state.get("secured_sql"),
+        analysis_sql=state.get("analysis_sql"),
         clarification=state.get("clarification"),
         error=state.get("error"),
         result=state.get("result"),
@@ -85,3 +94,6 @@ class Deps:
     layer: SemanticLayer
     settings: Settings
     resolve_gene: Callable[[ReadReplica, str], GeneResolution] = _default_resolve_gene
+    run_sandbox: Callable[[list[str], list[dict[str, object]], str], QueryResult] = (
+        _default_run_sandbox
+    )

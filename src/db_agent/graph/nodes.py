@@ -10,6 +10,7 @@ from __future__ import annotations
 from langgraph.graph import END
 
 from db_agent.graph.state import AgentState, Deps
+from db_agent.llm import analyze_sql as llm_analyze_sql
 from db_agent.llm import answer as llm_answer
 from db_agent.llm import extract_genes as llm_extract_genes
 from db_agent.llm import generate_sql as llm_generate_sql
@@ -107,13 +108,33 @@ def after_guard(state: AgentState) -> str:
 
 
 def after_execute(state: AgentState) -> str:
-    return {"ok": "answer", "retry": "generate_sql", "fatal": END}[state["outcome"]]
+    return {"ok": "analyze", "retry": "generate_sql", "fatal": END}[state["outcome"]]
+
+
+def analyze_node(state: AgentState, deps: Deps) -> dict:
+    result = state.get("result")
+    if result is None or result.rowcount == 0:
+        return {}
+    sql = llm_analyze_sql(deps.llm, deps.settings, state["question"], result)
+    if not sql or sql.strip().upper() == "NONE":
+        return {}
+    try:
+        analysis = deps.run_sandbox(result.columns, result.rows, sql)
+    except GuardError:
+        return {}  # fail-soft: analysis is additive; degrade to the raw-result answer
+    return {"analysis": analysis, "analysis_sql": sql}
 
 
 def answer_node(state: AgentState, deps: Deps) -> dict:
-    text = llm_answer(
-        deps.llm, deps.settings, state["question"], state["secured_sql"], state["result"]
-    )
+    analysis = state.get("analysis")
+    if analysis is not None:
+        text = llm_answer(
+            deps.llm, deps.settings, state["question"], state["analysis_sql"], analysis
+        )
+    else:
+        text = llm_answer(
+            deps.llm, deps.settings, state["question"], state["secured_sql"], state["result"]
+        )
     return {"answer": text, "status": "answered"}
 
 

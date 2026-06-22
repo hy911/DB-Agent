@@ -36,3 +36,17 @@ def test_deps_default_resolve_gene_is_callable():
 
     deps = Deps(llm=object(), replica=object(), layer=object(), settings=Settings(_env_file=None))
     assert callable(deps.resolve_gene)
+
+
+def test_initial_state_has_analysis_fields():
+    s = initial_state("q")
+    assert s["analysis"] is None
+    assert s["analysis_sql"] is None
+
+
+def test_deps_default_run_sandbox_is_callable():
+    from db_agent.config import Settings
+    from db_agent.graph.state import Deps
+
+    deps = Deps(llm=object(), replica=object(), layer=object(), settings=Settings(_env_file=None))
+    assert callable(deps.run_sandbox)

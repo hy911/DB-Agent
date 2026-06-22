@@ -10,6 +10,7 @@ from db_agent.graph.nodes import (
     after_guard,
     after_resolve,
     after_route,
+    analyze_node,
     answer_node,
     assemble_context_node,
     execute_node,
@@ -256,13 +257,95 @@ def test_after_guard_and_execute_dispatch():
     s = initial_state("q")
     s["outcome"] = "ok"
     assert after_guard(s) == "execute"
-    assert after_execute(s) == "answer"
+    assert after_execute(s) == "analyze"
     s["outcome"] = "retry"
     assert after_guard(s) == "generate_sql"
     assert after_execute(s) == "generate_sql"
     s["outcome"] = "fatal"
     assert after_guard(s) == END
     assert after_execute(s) == END
+
+
+def _qr_rows():
+    return QueryResult(
+        columns=["group_id", "tv"],
+        rows=[{"group_id": "A", "tv": 1.0}, {"group_id": "B", "tv": 2.0}],
+        rowcount=2,
+        truncated=False,
+        sql="SELECT group_id, tv",
+        elapsed_ms=1.0,
+    )
+
+
+def test_analyze_node_runs_sandbox_when_sql_returned():
+    analysis = QueryResult(
+        columns=["m"],
+        rows=[{"m": 1.5}],
+        rowcount=1,
+        truncated=False,
+        sql="SELECT avg(tv) AS m FROM result",
+        elapsed_ms=0.0,
+    )
+
+    def fake_sandbox(columns, rows, sql):
+        assert columns == ["group_id", "tv"]
+        return analysis
+
+    deps = _deps(llm=_LLM({"qwen-code": ["SELECT avg(tv) AS m FROM result"]}))
+    object.__setattr__(deps, "run_sandbox", fake_sandbox)
+    s = initial_state("avg tv?")
+    s["result"] = _qr_rows()
+    out = analyze_node(s, deps)
+    assert out["analysis"] is analysis
+    assert "result" in out["analysis_sql"].lower()
+
+
+def test_analyze_node_none_passes_through():
+    deps = _deps(llm=_LLM({"qwen-code": ["NONE"]}))
+    s = initial_state("q")
+    s["result"] = _qr_rows()
+    assert analyze_node(s, deps) == {}
+
+
+def test_analyze_node_empty_result_skips_llm():
+    empty = QueryResult(
+        columns=["x"], rows=[], rowcount=0, truncated=False, sql="s", elapsed_ms=0.0
+    )
+    deps = _deps(llm=_LLM({}))  # no scripted response -> must not be called
+    s = initial_state("q")
+    s["result"] = empty
+    assert analyze_node(s, deps) == {}
+
+
+def test_analyze_node_guard_error_degrades():
+    def boom(columns, rows, sql):
+        raise GuardError("duckdb_error", "bad", retryable=False)
+
+    deps = _deps(llm=_LLM({"qwen-code": ["SELECT * FROM result"]}))
+    object.__setattr__(deps, "run_sandbox", boom)
+    s = initial_state("q")
+    s["result"] = _qr_rows()
+    assert analyze_node(s, deps) == {}
+
+
+def test_answer_node_uses_analysis_when_present():
+    analysis = QueryResult(
+        columns=["m"],
+        rows=[{"m": 1.5}],
+        rowcount=1,
+        truncated=False,
+        sql="SELECT avg(tv) AS m FROM result",
+        elapsed_ms=0.0,
+    )
+    deps = _deps(llm=_LLM({"qwen-main": ["Average is 1.5."]}))
+    s = initial_state("q")
+    s["secured_sql"] = "SELECT group_id, tv FROM t"
+    s["result"] = _qr_rows()
+    s["analysis"] = analysis
+    s["analysis_sql"] = "SELECT avg(tv) AS m FROM result"
+    out = answer_node(s, deps)
+    assert out["answer"] == "Average is 1.5."
+    assert out["status"] == "answered"
 
 
 def test_answer_node_sets_answer():

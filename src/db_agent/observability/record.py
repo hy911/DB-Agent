@@ -24,6 +24,7 @@ class RunRecord:
     context: str | None
     raw_sql: str | None
     sql: str | None
+    analysis_sql: str | None
     status: str
     attempts: int
     rowcount: int | None
@@ -48,6 +49,7 @@ class RunRecord:
             context=state.get("context"),
             raw_sql=state.get("sql"),
             sql=state.get("secured_sql"),
+            analysis_sql=state.get("analysis_sql"),
             status=state["status"],
             attempts=state["attempts"],
             rowcount=rowcount,
