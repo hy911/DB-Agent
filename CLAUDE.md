@@ -59,12 +59,14 @@ Architecture (already agreed, build to these):
 ## Status (2026-06-22)
 
 **Phase 1 MVP complete and live-verified** end-to-end through the FastAPI
-endpoint. **Phase 2 in progress.** The full chain (all layers built):
+endpoint. **Phase 2: DuckDB post-processing + stats inference built** (offline-
+complete + security-reviewed; live e2e gated by the known gateway 504). The full
+chain (all layers built):
 
 ```
 domain route / clarify → context assembly (yaml) → SQL gen (qwen-code)
   → sqlglot validate + permission inject (sql/secure.py) → read-replica exec
-  → self-correct (≤3) → NL answer + generated SQL          (POST /query)
+  → self-correct (≤3) → DuckDB analyze → vetted stats → NL answer + SQL (POST /query)
 ```
 
 Done:
@@ -101,8 +103,21 @@ Done:
   no file/network/attach funcs incl. the dedicated `read_csv`/`read_parquet`
   nodes) + the sandbox only ever sees already-permission-filtered rows + **fail-
   soft** (any GuardError → degrade to the raw-result answer). Injected via
-  `Deps.run_sandbox`. Phase 2 (real statistical inference: t-test / ANOVA / KM via
-  a vetted function set) is a **separate** future spec, NOT built.
+  `Deps.run_sandbox`.
+- **stats sandbox Phase 2** (real statistical inference; added 2026-06-22,
+  offline-complete + SQL-security-reviewed SOUND; live e2e blocked only by the
+  known gateway 504 gap). New pure subpackage `sandbox/stats/` (spec / validator /
+  registry / functions / runner). A new `stats` node runs AFTER `analyze`:
+  `execute → analyze (DuckDB reshape) → stats (vetted test) → answer`. The LLM
+  emits ONLY a structured `{function, params}` JSON request (data, never code);
+  `validate_stat_request` checks it against the frozen `REGISTRY` allowlist + the
+  current table's columns + scalar bounds, then a hand-written impl calls
+  scipy/lifelines. Three vetted tests: **Welch t-test**, **one-way ANOVA**,
+  **Kaplan-Meier + log-rank** (named test + caveats, no auto-switching). Dispatch
+  is only ever through the registry dict (no dynamic import); pure in-memory compute
+  (no file/network/DB); **fail-soft** (any GuardError → degrade to the descriptive
+  answer); independent row cap + typeless-scalar reject as defense in depth. Reads
+  the post-DuckDB table if present, else the raw result. Injected via `Deps.run_stat`.
 
 `resolve_gene` is now **wired into the question flow** (Plan B, executed
 2026-06-18, live-verified): a gene-bearing domain (`is_gene_bearing`) routes
@@ -112,12 +127,12 @@ sql-gen context; any ambiguous/unknown short-circuits to clarify. The resolver i
 injected via `Deps.resolve_gene` (default = real `db.resolve_gene`) so the graph
 stays offline-testable. Design specs + plans live under `docs/superpowers/`.
 
-Still deferred (do not build until asked): **stats sandbox Phase 2** (real
-statistical inference — t-test / ANOVA / KM survival via a vetted function set, its
-own security design), **pgvector example retrieval** (few-shot from the
-observability log), `modeling_panel_data` (needs a permission-grain decision, see
-above), and **LLM gateway retry/backoff** (a real gap — live answer-node calls hit
-transient 504s during mutation, modeling, and sandbox e2e).
+Still deferred (do not build until asked): **pgvector example retrieval** (few-shot
+from the observability log), `modeling_panel_data` (needs a permission-grain
+decision, see above), and **LLM gateway retry/backoff** (a real gap — live
+answer-node/generate-sql calls hit transient 504s during mutation, modeling, sandbox,
+and stats Phase 2 e2e). Future stats tests (two-way ANOVA, post-hoc, Cox regression)
+are pure `sandbox/stats/registry.py` additions once asked.
 
 ### Permission policy (Phase 1, confirmed with the user)
 
@@ -148,10 +163,12 @@ src/db_agent/
   llm/             # LiteLLM client + prompts + tasks (route / generate_sql /
                    #   answer / extract_genes / analyze_sql)
   sandbox/         # the ONLY DuckDB boundary: validator.py (analysis-SQL guard),
-                   #   engine.py (locked-down in-memory DuckDBSandbox.run)
+                   #   engine.py (locked-down in-memory DuckDBSandbox.run);
+                   #   stats/ (Phase 2: vetted t-test/ANOVA/KM registry + validator
+                   #   + runner, LLM emits {function,params} data, never code)
   graph/           # LangGraph: state.py (AgentState, Deps), nodes.py, build.py.
                    #   Flow: route → [extract→resolve] → assemble → generate_sql →
-                   #   guard → execute → analyze → answer
+                   #   guard → execute → analyze → stats → answer
   api/             # FastAPI: app.py (create_app, POST /query, GET /health)
   observability/   # RunRecord + JsonlObserver (optional per-run logging)
 tests/             # offline default (no DB/LLM); tests/integration/ is -m integration
