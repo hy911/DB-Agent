@@ -94,3 +94,16 @@ def test_rejects_scalar_wrong_type():
 def test_rejects_non_object_request():
     with pytest.raises(GuardError):
         validate_stat_request("SELECT 1", COLS, REG)
+
+
+def test_rejects_typeless_scalar():
+    reg = {
+        "bad": StatTest(
+            "bad",
+            "typeless scalar",
+            {"x": ParamSpec("scalar", required=False, py_type=None)},
+            _dummy_run,
+        )
+    }
+    with pytest.raises(GuardError):
+        validate_stat_request({"function": "bad", "params": {"x": 1}}, COLS, reg)

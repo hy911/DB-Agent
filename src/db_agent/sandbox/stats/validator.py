@@ -53,6 +53,12 @@ def validate_stat_request(
 
 
 def _check_scalar(pname: str, val: object, spec: ParamSpec) -> None:
+    if spec.py_type is None:
+        # A typeless scalar would skip all type/bounds checks below — reject it so a
+        # future registry entry can never silently accept an unchecked value.
+        raise GuardError(
+            "stat_bad_scalar", f"scalar param {pname!r} has no declared type", retryable=False
+        )
     if spec.py_type is bool:
         if not isinstance(val, bool):
             raise GuardError(

@@ -36,3 +36,12 @@ def test_run_stat_rejects_column_not_in_table():
     req = json.dumps({"function": "welch_t_test", "params": {"value": "v", "group": "missing"}})
     with pytest.raises(GuardError):
         run_stat(["g", "v"], _rows(), req)
+
+
+def test_run_stat_rejects_too_many_rows():
+    from db_agent.sandbox.stats.runner import _MAX_ROWS
+
+    rows = [{"g": "a", "v": 1.0}] * (_MAX_ROWS + 1)
+    req = json.dumps({"function": "welch_t_test", "params": {"value": "v", "group": "g"}})
+    with pytest.raises(GuardError):
+        run_stat(["g", "v"], rows, req)
