@@ -8,8 +8,9 @@ A natural-language query & analysis agent over the company's **mouse tumor model
 PostgreSQL database**. Users (both domain scientists and non-technical
 management) ask in plain language; the agent routes to a domain, assembles
 schema context, generates SQL, **validates and injects row-level permissions
-deterministically**, runs it on a read-only replica, self-corrects on error, and
-answers in natural language while showing the SQL it ran.
+deterministically**, runs it on a read-only replica, self-corrects on error,
+**optionally post-processes the result set in a locked-down in-memory DuckDB**,
+and answers in natural language while showing the SQL it ran.
 
 When intent is ambiguous, the agent **clarifies rather than guesses**.
 
@@ -55,7 +56,7 @@ Architecture (already agreed, build to these):
   django/auth/rbac system tables, `m_`-prefixed mirror tables, and `*_stats`
   deprecated tables.
 
-## Status (2026-06-17)
+## Status (2026-06-22)
 
 **Phase 1 MVP complete and live-verified** end-to-end through the FastAPI
 endpoint. **Phase 2 in progress.** The full chain (all layers built):
@@ -145,19 +146,24 @@ src/db_agent/
   db/              # the ONLY I/O boundary: replica.py (pool + execute + fetch),
                    #   explain.py, mapping.py, result.py, gene_resolver.py
   llm/             # LiteLLM client + prompts + tasks (route / generate_sql /
-                   #   answer / extract_genes)
-  graph/           # LangGraph: state.py (AgentState, Deps), nodes.py, build.py
-                   #   (build_graph + run_agent)
+                   #   answer / extract_genes / analyze_sql)
+  sandbox/         # the ONLY DuckDB boundary: validator.py (analysis-SQL guard),
+                   #   engine.py (locked-down in-memory DuckDBSandbox.run)
+  graph/           # LangGraph: state.py (AgentState, Deps), nodes.py, build.py.
+                   #   Flow: route → [extract→resolve] → assemble → generate_sql →
+                   #   guard → execute → analyze → answer
   api/             # FastAPI: app.py (create_app, POST /query, GET /health)
   observability/   # RunRecord + JsonlObserver (optional per-run logging)
 tests/             # offline default (no DB/LLM); tests/integration/ is -m integration
 ```
 
-Layering intent: `sql/` is pure (no I/O) so it stays unit-testable; `db/` is the
-only I/O boundary; `graph/` nodes stay thin and push logic into `sql/`/`db/`/`llm/`.
-**Dependency injection:** external deps live in `graph.state.Deps`; nodes are
-bound with `functools.partial(node, deps=deps)`; `run_agent` takes `observer=` /
-`resolve_gene=` overrides so the whole graph is offline-testable with fakes.
+Layering intent: `sql/` and `sandbox/` are pure guard rails (no external I/O) so
+they stay unit-testable; `db/` is the only Postgres boundary, `sandbox/` the only
+DuckDB boundary; `graph/` nodes stay thin and push logic into `sql/`/`db/`/`llm/`/
+`sandbox/`. **Dependency injection:** external deps live in `graph.state.Deps`;
+nodes are bound with `functools.partial(node, deps=deps)`; `run_agent` takes
+`observer=` / `resolve_gene=` / `run_sandbox=` overrides so the whole graph is
+offline-testable with fakes.
 
 ## Conventions
 
@@ -195,9 +201,11 @@ unless 3.11 support is explicitly dropped.
 
 - **sqlglot 30.x stores `FROM` under the `from_` arg key** (older versions used
   `from`). When walking a SELECT's direct sources, check both keys.
-- `semantic_layer.yaml` lists domains whose hub/tables aren't defined yet
-  (`modeling`, `mutation`) — forward declarations, not errors. They're excluded
-  from `routable_domains()` until they gain tables.
+- A domain may be declared under `domains:` with no tables yet — a forward
+  declaration, not an error; `routable_domains()` excludes it until it gains
+  tables (this is the zero-code extension path). All four business domains
+  (efficacy / expression / mutation / modeling) are now defined and routable; none
+  is currently pending.
 - The permission injector must snapshot SELECT scopes **before** mutating, and
   tag its generated `EXISTS` sub-select, so a second pass doesn't re-enter and
   double-filter (idempotency).
