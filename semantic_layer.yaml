@@ -218,6 +218,77 @@ tables:
       animal_id:    {type: text, desc: 动物编号(库内为字符串)}
       survival:     {type: text, desc: 生存时间(库内为字符串)}
 
+  modeling_facs_growth_curve_data:
+    domain: modeling
+    desc: 建模-FACS 检测(按检测项/组织/动物)
+    access_via: modeling_attr_info
+    join_to_hub: [model_uuid, model_no, group_id]
+    columns:
+      model_uuid:     {type: varchar}
+      model_no:       {type: varchar}
+      group_id:       {type: varchar}
+      animal_id:      {type: integer, desc: 动物编号}
+      detection_item: {type: varchar, desc: 检测项}
+      tissue_type:    {type: varchar, desc: 组织类型}
+      date:           {type: timestamp, desc: 测量日期}
+      val:            {type: float, desc: 检测值}
+
+  modeling_avg_radiance_data:
+    domain: modeling
+    desc: 建模-平均辐射强度(活体成像，纵向时序)
+    access_via: modeling_attr_info
+    join_to_hub: [model_uuid, model_no, group_id]
+    columns:
+      model_uuid:   {type: varchar}
+      model_no:     {type: varchar}
+      group_id:     {type: varchar}
+      animal_id:    {type: varchar, desc: 动物编号}
+      days:         {type: integer, desc: 建模后天数}
+      date:         {type: date, desc: 测量日期}
+      avg_radiance: {type: float, desc: 平均辐射强度}
+
+  modeling_total_flux_data:
+    domain: modeling
+    desc: 建模-总光通量(活体成像，纵向时序)
+    access_via: modeling_attr_info
+    join_to_hub: [model_uuid, model_no, group_id]
+    columns:
+      model_uuid: {type: varchar}
+      model_no:   {type: varchar}
+      group_id:   {type: varchar}
+      animal_id:  {type: varchar, desc: 动物编号}
+      days:       {type: integer, desc: 建模后天数}
+      date:       {type: date, desc: 测量日期}
+      total_flux: {type: float, desc: 总光通量}
+
+  modeling_elisa_data:
+    domain: modeling
+    desc: 建模-ELISA 检测(按检测项/组织/动物)
+    access_via: modeling_attr_info
+    join_to_hub: [model_uuid, model_no, group_id]
+    columns:
+      model_uuid:     {type: varchar}
+      model_no:       {type: varchar}
+      group_id:       {type: varchar}
+      animal_id:      {type: integer, desc: 动物编号}
+      detection_item: {type: varchar, desc: 检测项}
+      tissue_type:    {type: varchar, desc: 组织类型}
+      date:           {type: date, desc: 测量日期}
+      val:            {type: float, desc: 检测值}
+
+  modeling_pathology_data:
+    domain: modeling
+    desc: 建模-病理检测(横截面，按检测项/动物)
+    access_via: modeling_attr_info
+    join_to_hub: [model_uuid, model_no, group_id]
+    columns:
+      model_uuid:     {type: varchar}
+      model_no:       {type: varchar}
+      group_id:       {type: varchar}
+      animal_id:      {type: varchar, desc: 动物编号}
+      detection_item: {type: varchar, desc: 检测项}
+      val:            {type: float, desc: 检测值}
+
   gene_info:
     domain: reference
     desc: 基因字典(当前权威表)，symbol 唯一

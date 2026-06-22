@@ -68,3 +68,17 @@ def test_secure_modeling_detail_injects_exists_semijoin():
     assert "_perm.for_bd = 'yes'" in s
     # the detail table must NOT get a bare for_bd filter on itself
     assert "modeling_tumor_volume_growth_curve_data.for_bd" not in s
+
+
+def test_secure_modeling_facs_injects_exists_semijoin():
+    out = secure_query(
+        "SELECT val FROM modeling_facs_growth_curve_data", LAYER, "modeling"
+    )
+    s = out.sql
+    assert "EXISTS" in s.upper()
+    assert "modeling_attr_info AS _perm" in s
+    assert "_perm.model_uuid = modeling_facs_growth_curve_data.model_uuid" in s
+    assert "_perm.model_no = modeling_facs_growth_curve_data.model_no" in s
+    assert "_perm.group_id = modeling_facs_growth_curve_data.group_id" in s
+    assert "_perm.for_bd = 'yes'" in s
+    assert "modeling_facs_growth_curve_data.for_bd" not in s

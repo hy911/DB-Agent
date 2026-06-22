@@ -68,7 +68,17 @@ def test_modeling_detail_tables_join_to_hub():
         "modeling_tumor_volume_growth_curve_data",
         "modeling_body_weight_growth_curve_data",
         "modeling_survival_data",
+        "modeling_facs_growth_curve_data",
+        "modeling_avg_radiance_data",
+        "modeling_total_flux_data",
+        "modeling_elisa_data",
+        "modeling_pathology_data",
     }
     for t in details:
         assert t.access_via == "modeling_attr_info"
         assert t.join_to_hub == ("model_uuid", "model_no", "group_id")
+
+
+def test_modeling_panel_excluded():
+    # panel lacks group_id; deliberately not added (would coarsen permission grain)
+    assert LAYER.get_table("modeling_panel_data") is None
