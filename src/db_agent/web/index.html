@@ -1,0 +1,764 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>DB-Agent · 小鼠肿瘤模型问答</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link
+  href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap"
+  rel="stylesheet"
+/>
+<style>
+  :root {
+    /* clinical-paper + petrol-instrument palette — chosen for an oncology
+       data instrument, not a generic dashboard */
+    --paper: #f3f5f2;
+    --surface: #fcfcfb;
+    --surface-sunk: #f6f7f4;
+    --ink: #16201e;
+    --ink-soft: #59635f;
+    --ink-faint: #8a938e;
+    --line: #e3e6e1;
+    --line-strong: #d3d8d2;
+
+    --accent: #0c6e63;
+    --accent-deep: #084a43;
+    --accent-tint: #e5f0ec;
+
+    --clarify: #2f5c8f;
+    --clarify-tint: #e8eef6;
+    --warn: #946410;
+    --warn-tint: #f6efdf;
+    --error: #a23a33;
+    --error-tint: #f6e9e7;
+
+    --r-card: 14px;
+    --r-soft: 9px;
+    --shadow: 0 1px 2px rgba(22, 32, 30, 0.04), 0 8px 24px rgba(22, 32, 30, 0.05);
+
+    --font-display: "Space Grotesk", "Segoe UI", system-ui, sans-serif;
+    --font-body: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+    --font-mono: "IBM Plex Mono", ui-monospace, "Cascadia Code", Consolas, monospace;
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body { height: 100%; }
+
+  body {
+    margin: 0;
+    font-family: var(--font-body);
+    font-size: 15px;
+    line-height: 1.6;
+    color: var(--ink);
+    background: var(--paper);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .app {
+    display: flex;
+    flex-direction: column;
+    height: 100dvh;
+    max-width: 880px;
+    margin: 0 auto;
+    background: var(--paper);
+  }
+
+  /* ── top bar ─────────────────────────────────────────── */
+  .topbar {
+    flex: none;
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+    padding: 18px 28px 14px;
+    border-bottom: 1px solid var(--line);
+  }
+  .wordmark {
+    font-family: var(--font-display);
+    font-weight: 700;
+    font-size: 19px;
+    letter-spacing: -0.01em;
+    color: var(--ink);
+  }
+  .wordmark .dot { color: var(--accent); }
+  .subtitle {
+    font-size: 12.5px;
+    color: var(--ink-faint);
+    letter-spacing: 0.01em;
+  }
+  .health {
+    margin-left: auto;
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    font-size: 11.5px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--ink-soft);
+    align-self: center;
+  }
+  .health .led {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: var(--ink-faint);
+    box-shadow: 0 0 0 0 rgba(12, 110, 99, 0.4);
+  }
+  .health[data-state="up"] .led {
+    background: var(--accent);
+    animation: pulse 2.6s ease-out infinite;
+  }
+  .health[data-state="down"] .led { background: var(--error); }
+  @keyframes pulse {
+    0% { box-shadow: 0 0 0 0 rgba(12, 110, 99, 0.35); }
+    70% { box-shadow: 0 0 0 7px rgba(12, 110, 99, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(12, 110, 99, 0); }
+  }
+
+  /* ── message stream ──────────────────────────────────── */
+  .stream {
+    flex: 1 1 auto;
+    overflow-y: auto;
+    padding: 24px 28px 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 22px;
+    scroll-behavior: smooth;
+  }
+
+  /* empty state */
+  .empty {
+    margin: auto;
+    max-width: 540px;
+    text-align: center;
+    padding: 24px 0 48px;
+  }
+  .empty h1 {
+    font-family: var(--font-display);
+    font-weight: 600;
+    font-size: 26px;
+    line-height: 1.25;
+    letter-spacing: -0.015em;
+    margin: 0 0 10px;
+  }
+  .empty p {
+    color: var(--ink-soft);
+    margin: 0 0 26px;
+    font-size: 14.5px;
+  }
+  .eyebrow {
+    font-size: 11px;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--accent);
+    font-weight: 600;
+    margin-bottom: 14px;
+  }
+  .chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 9px;
+    justify-content: center;
+  }
+  .chip {
+    font-family: var(--font-body);
+    font-size: 13.5px;
+    color: var(--ink);
+    background: var(--surface);
+    border: 1px solid var(--line-strong);
+    border-radius: 999px;
+    padding: 8px 15px;
+    cursor: pointer;
+    transition: border-color 0.15s, color 0.15s, transform 0.15s;
+  }
+  .chip:hover { border-color: var(--accent); color: var(--accent-deep); }
+  .chip:active { transform: translateY(1px); }
+
+  /* user turn */
+  .turn-user {
+    align-self: flex-end;
+    max-width: 76%;
+    background: var(--accent);
+    color: #f4faf8;
+    padding: 11px 16px;
+    border-radius: 16px 16px 4px 16px;
+    font-size: 14.5px;
+    line-height: 1.5;
+    white-space: pre-wrap;
+    word-break: break-word;
+    box-shadow: var(--shadow);
+  }
+
+  /* agent turn — the signature card */
+  .turn-agent {
+    align-self: stretch;
+    position: relative;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--r-card);
+    padding: 18px 20px 18px 22px;
+    box-shadow: var(--shadow);
+    overflow: hidden;
+  }
+  /* electrophoresis / chromatography "lane" — the page's one bold gesture */
+  .turn-agent::before {
+    content: "";
+    position: absolute;
+    left: 0; top: 0; bottom: 0;
+    width: 5px;
+    background:
+      repeating-linear-gradient(
+        180deg,
+        var(--accent-deep) 0 7px,
+        var(--accent) 7px 11px,
+        rgba(12, 110, 99, 0.35) 11px 19px,
+        var(--accent) 19px 23px
+      );
+  }
+  .turn-agent[data-status="clarify"]::before {
+    background: repeating-linear-gradient(180deg, var(--clarify) 0 9px, rgba(47,92,143,0.4) 9px 17px);
+  }
+  .turn-agent[data-status="error"]::before {
+    background: repeating-linear-gradient(180deg, var(--error) 0 9px, rgba(162,58,51,0.4) 9px 17px);
+  }
+
+  .agent-head {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    margin-bottom: 9px;
+  }
+  .agent-name {
+    font-family: var(--font-display);
+    font-weight: 600;
+    font-size: 12.5px;
+    letter-spacing: 0.02em;
+    color: var(--ink-soft);
+  }
+  .badge {
+    font-size: 10.5px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 999px;
+  }
+  .badge.answered { color: var(--accent-deep); background: var(--accent-tint); }
+  .badge.clarify { color: var(--clarify); background: var(--clarify-tint); }
+  .badge.error { color: var(--error); background: var(--error-tint); }
+
+  .answer {
+    font-size: 15px;
+    line-height: 1.62;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+  .answer.clarify-text {
+    color: var(--clarify);
+  }
+  .answer.error-text {
+    color: var(--error);
+  }
+  .clarify-hint, .error-hint {
+    margin-top: 8px;
+    font-size: 12.5px;
+    color: var(--ink-faint);
+  }
+
+  /* disclosure panels: instrument readouts */
+  .readout { margin-top: 14px; border-top: 1px dashed var(--line-strong); padding-top: 12px; }
+  details.readout summary {
+    list-style: none;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    font-weight: 600;
+    color: var(--ink-soft);
+    user-select: none;
+  }
+  details.readout summary::-webkit-details-marker { display: none; }
+  .caret {
+    width: 0; height: 0;
+    border-left: 5px solid var(--ink-faint);
+    border-top: 4px solid transparent;
+    border-bottom: 4px solid transparent;
+    transition: transform 0.18s ease;
+  }
+  details[open] > summary .caret { transform: rotate(90deg); }
+  .summary-meta { margin-left: auto; color: var(--ink-faint); font-weight: 500; letter-spacing: 0.02em; text-transform: none; }
+
+  .panel {
+    margin-top: 10px;
+    background: var(--surface-sunk);
+    border: 1px solid var(--line);
+    border-radius: var(--r-soft);
+  }
+
+  /* SQL block */
+  .sql-wrap { position: relative; }
+  pre.sql {
+    margin: 0;
+    padding: 14px 14px 14px 16px;
+    font-family: var(--font-mono);
+    font-size: 12.5px;
+    line-height: 1.7;
+    color: var(--ink);
+    overflow-x: auto;
+    white-space: pre;
+    background:
+      linear-gradient(var(--surface-sunk), var(--surface-sunk)) padding-box,
+      repeating-linear-gradient(180deg, transparent 0 27px, rgba(22,32,30,0.025) 27px 28px);
+  }
+  .copy-btn {
+    position: absolute;
+    top: 8px; right: 8px;
+    font-family: var(--font-body);
+    font-size: 11px;
+    letter-spacing: 0.04em;
+    color: var(--ink-soft);
+    background: var(--surface);
+    border: 1px solid var(--line-strong);
+    border-radius: 6px;
+    padding: 3px 9px;
+    cursor: pointer;
+    transition: color 0.15s, border-color 0.15s;
+  }
+  .copy-btn:hover { color: var(--accent-deep); border-color: var(--accent); }
+
+  /* result table */
+  .table-scroll { overflow-x: auto; max-height: 360px; overflow-y: auto; }
+  table.result {
+    border-collapse: collapse;
+    width: 100%;
+    font-size: 12.5px;
+  }
+  table.result th, table.result td {
+    text-align: left;
+    padding: 7px 12px;
+    border-bottom: 1px solid var(--line);
+    white-space: nowrap;
+  }
+  table.result thead th {
+    position: sticky;
+    top: 0;
+    background: var(--surface);
+    font-family: var(--font-display);
+    font-weight: 600;
+    font-size: 11.5px;
+    letter-spacing: 0.02em;
+    color: var(--ink-soft);
+    border-bottom: 1px solid var(--line-strong);
+  }
+  table.result td {
+    font-family: var(--font-mono);
+    color: var(--ink);
+  }
+  table.result tbody tr:nth-child(even) td { background: rgba(22,32,30,0.018); }
+  td.nullcell { color: var(--ink-faint); font-style: italic; }
+
+  .truncated-flag {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 8px;
+    font-size: 11.5px;
+    color: var(--warn);
+    background: var(--warn-tint);
+    border-radius: 6px;
+    padding: 4px 9px;
+  }
+  .rowcap-note {
+    padding: 8px 12px;
+    font-size: 11.5px;
+    color: var(--ink-faint);
+    border-top: 1px solid var(--line);
+  }
+
+  /* thinking indicator */
+  .thinking {
+    display: inline-flex;
+    align-items: center;
+    gap: 9px;
+    color: var(--ink-soft);
+    font-size: 13.5px;
+  }
+  .thinking .lanes { display: inline-flex; gap: 3px; }
+  .thinking .lanes i {
+    width: 3px; height: 13px;
+    background: var(--accent);
+    border-radius: 2px;
+    opacity: 0.35;
+    animation: run 1s ease-in-out infinite;
+  }
+  .thinking .lanes i:nth-child(2) { animation-delay: 0.12s; }
+  .thinking .lanes i:nth-child(3) { animation-delay: 0.24s; }
+  .thinking .lanes i:nth-child(4) { animation-delay: 0.36s; }
+  @keyframes run {
+    0%, 100% { transform: scaleY(0.5); opacity: 0.3; }
+    50% { transform: scaleY(1); opacity: 1; }
+  }
+
+  .fade-in { animation: fade 0.32s ease both; }
+  @keyframes fade { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+
+  /* ── composer ────────────────────────────────────────── */
+  .composer {
+    flex: none;
+    border-top: 1px solid var(--line);
+    padding: 14px 28px 20px;
+    background: var(--paper);
+  }
+  .composer-inner {
+    display: flex;
+    align-items: flex-end;
+    gap: 10px;
+    background: var(--surface);
+    border: 1px solid var(--line-strong);
+    border-radius: 14px;
+    padding: 8px 8px 8px 16px;
+    transition: border-color 0.15s, box-shadow 0.15s;
+  }
+  .composer-inner:focus-within {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px var(--accent-tint);
+  }
+  textarea#q {
+    flex: 1 1 auto;
+    border: none;
+    outline: none;
+    resize: none;
+    background: transparent;
+    font-family: var(--font-body);
+    font-size: 15px;
+    line-height: 1.5;
+    color: var(--ink);
+    max-height: 168px;
+    padding: 6px 0;
+  }
+  textarea#q::placeholder { color: var(--ink-faint); }
+  .send {
+    flex: none;
+    font-family: var(--font-display);
+    font-weight: 600;
+    font-size: 14px;
+    color: #f4faf8;
+    background: var(--accent);
+    border: none;
+    border-radius: 10px;
+    padding: 9px 18px;
+    cursor: pointer;
+    transition: background 0.15s, opacity 0.15s;
+  }
+  .send:hover:not(:disabled) { background: var(--accent-deep); }
+  .send:disabled { opacity: 0.45; cursor: not-allowed; }
+  .composer-hint {
+    margin: 8px 4px 0;
+    font-size: 11px;
+    color: var(--ink-faint);
+    letter-spacing: 0.01em;
+  }
+  kbd {
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    background: var(--surface-sunk);
+    border: 1px solid var(--line-strong);
+    border-bottom-width: 2px;
+    border-radius: 4px;
+    padding: 0 5px;
+    color: var(--ink-soft);
+  }
+
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
+
+  @media (max-width: 640px) {
+    .topbar { padding: 14px 16px 12px; flex-wrap: wrap; }
+    .stream { padding: 18px 16px 6px; }
+    .composer { padding: 12px 16px 16px; }
+    .turn-user { max-width: 88%; }
+    .empty h1 { font-size: 22px; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
+  }
+</style>
+</head>
+<body>
+  <div class="app">
+    <header class="topbar">
+      <span class="wordmark">DB<span class="dot">·</span>Agent</span>
+      <span class="subtitle">小鼠肿瘤模型 · 自然语言问答</span>
+      <span class="health" id="health" data-state="checking" title="服务状态">
+        <span class="led"></span><span id="health-label">连接中</span>
+      </span>
+    </header>
+
+    <main class="stream" id="stream" aria-live="polite" aria-label="对话">
+      <section class="empty" id="empty">
+        <div class="eyebrow">Ask the database</div>
+        <h1>用一句话问，<br />让数据自己回答。</h1>
+        <p>覆盖药效、建模、表达与突变四个域。生成的 SQL 与结果表都可展开核对。</p>
+        <div class="chips" id="chips"></div>
+      </section>
+    </main>
+
+    <footer class="composer">
+      <div class="composer-inner">
+        <textarea id="q" rows="1" placeholder="例如：EGFR 在各模型中的平均表达量是多少？" autofocus></textarea>
+        <button class="send" id="send" type="button">发送</button>
+      </div>
+      <div class="composer-hint"><kbd>Enter</kbd> 发送 · <kbd>Shift</kbd>+<kbd>Enter</kbd> 换行</div>
+    </footer>
+  </div>
+
+<script>
+(function () {
+  "use strict";
+
+  var EXAMPLES = [
+    "EGFR 在各模型中的平均表达量",
+    "哪些模型对吉非替尼有效",
+    "Trp53 突变的模型有哪些",
+    "肿瘤体积增长最快的前 10 个模型"
+  ];
+  var MAX_TABLE_ROWS = 200; // client-side display cap, distinct from server truncation
+
+  var stream = document.getElementById("stream");
+  var empty = document.getElementById("empty");
+  var chips = document.getElementById("chips");
+  var ta = document.getElementById("q");
+  var sendBtn = document.getElementById("send");
+  var busy = false;
+
+  // ── helpers ───────────────────────────────────────────
+  function el(tag, cls, text) {
+    var n = document.createElement(tag);
+    if (cls) n.className = cls;
+    if (text != null) n.textContent = text;
+    return n;
+  }
+  function scrollDown() {
+    requestAnimationFrame(function () { stream.scrollTop = stream.scrollHeight; });
+  }
+  function dismissEmpty() {
+    if (empty && empty.parentNode) empty.parentNode.removeChild(empty);
+  }
+
+  // ── render: user turn ─────────────────────────────────
+  function addUser(text) {
+    var n = el("div", "turn-user fade-in", text);
+    stream.appendChild(n);
+    scrollDown();
+  }
+
+  // ── render: thinking placeholder ──────────────────────
+  function addThinking() {
+    var card = el("div", "turn-agent fade-in");
+    card.setAttribute("data-status", "pending");
+    var head = el("div", "agent-head");
+    head.appendChild(el("span", "agent-name", "DB-Agent"));
+    card.appendChild(head);
+    var t = el("div", "thinking");
+    var lanes = el("span", "lanes");
+    for (var i = 0; i < 4; i++) lanes.appendChild(el("i"));
+    t.appendChild(lanes);
+    t.appendChild(el("span", null, "正在检索并生成 SQL…"));
+    card.appendChild(t);
+    stream.appendChild(card);
+    scrollDown();
+    return card;
+  }
+
+  // ── render: agent answer ──────────────────────────────
+  function fillAgent(card, data) {
+    card.innerHTML = "";
+    var status = data.status || "error";
+    card.setAttribute("data-status", status);
+
+    var head = el("div", "agent-head");
+    head.appendChild(el("span", "agent-name", "DB-Agent"));
+    var badgeText = status === "answered" ? "已回答" : status === "clarify" ? "需澄清" : "出错";
+    head.appendChild(el("span", "badge " + status, badgeText));
+    card.appendChild(head);
+
+    if (status === "clarify") {
+      card.appendChild(el("div", "answer clarify-text", data.clarification || "需要更多信息才能继续。"));
+      card.appendChild(el("div", "clarify-hint", "补充上面的细节后再问一次即可。"));
+      return;
+    }
+    if (status === "error") {
+      card.appendChild(el("div", "answer error-text", data.error || "查询未能完成。"));
+      card.appendChild(el("div", "error-hint", "可以换种问法，或缩小范围后重试。"));
+      return;
+    }
+
+    // answered
+    card.appendChild(el("div", "answer", data.answer || "（无文字答案）"));
+    if (data.sql) card.appendChild(buildSql(data.sql));
+    if (data.rows) card.appendChild(buildTable(data.rows));
+  }
+
+  function buildSql(sql) {
+    var d = el("details", "readout");
+    var s = el("summary");
+    s.appendChild(el("span", "caret"));
+    s.appendChild(el("span", null, "查看 SQL"));
+    d.appendChild(s);
+    var wrap = el("div", "panel sql-wrap");
+    var pre = el("pre", "sql", sql);
+    var copy = el("button", "copy-btn", "复制");
+    copy.type = "button";
+    copy.addEventListener("click", function () {
+      navigator.clipboard && navigator.clipboard.writeText(sql).then(function () {
+        copy.textContent = "已复制";
+        setTimeout(function () { copy.textContent = "复制"; }, 1400);
+      });
+    });
+    wrap.appendChild(pre);
+    wrap.appendChild(copy);
+    d.appendChild(wrap);
+    return d;
+  }
+
+  function buildTable(rows) {
+    var d = el("details", "readout");
+    var s = el("summary");
+    s.appendChild(el("span", "caret"));
+    s.appendChild(el("span", null, "结果表"));
+    var meta = el("span", "summary-meta", rows.rowcount + " 行" + (rows.truncated ? " · 已截断" : ""));
+    s.appendChild(meta);
+    d.appendChild(s);
+    d.open = true;
+
+    var panel = el("div", "panel");
+    var scroll = el("div", "table-scroll");
+    var table = el("table", "result");
+    var cols = rows.columns || [];
+
+    var thead = el("thead");
+    var hr = el("tr");
+    cols.forEach(function (c) { hr.appendChild(el("th", null, c)); });
+    thead.appendChild(hr);
+    table.appendChild(thead);
+
+    var tbody = el("tbody");
+    var data = rows.rows || [];
+    var shown = Math.min(data.length, MAX_TABLE_ROWS);
+    for (var i = 0; i < shown; i++) {
+      var tr = el("tr");
+      cols.forEach(function (c) {
+        var v = data[i][c];
+        if (v == null) {
+          tr.appendChild(el("td", "nullcell", "—"));
+        } else {
+          tr.appendChild(el("td", null, String(v)));
+        }
+      });
+      tbody.appendChild(tr);
+    }
+    table.appendChild(tbody);
+    scroll.appendChild(table);
+    panel.appendChild(scroll);
+
+    if (data.length > shown) {
+      panel.appendChild(el("div", "rowcap-note", "为浏览流畅，仅显示前 " + shown + " 行（共 " + data.length + " 行返回）。"));
+    }
+    d.appendChild(panel);
+
+    if (rows.truncated) {
+      var flag = el("div", "truncated-flag");
+      flag.appendChild(el("span", null, "⚠"));
+      flag.appendChild(el("span", null, "结果在服务端已按上限截断，可能不完整。"));
+      d.appendChild(flag);
+    }
+    return d;
+  }
+
+  // ── send flow ─────────────────────────────────────────
+  function ask(text) {
+    text = (text || "").trim();
+    if (!text || busy) return;
+    busy = true;
+    setSendEnabled();
+    dismissEmpty();
+    addUser(text);
+    ta.value = "";
+    autosize();
+    var card = addThinking();
+
+    fetch("/query", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ question: text })
+    })
+      .then(function (r) {
+        return r.json().then(function (body) { return { ok: r.ok, status: r.status, body: body }; });
+      })
+      .then(function (res) {
+        if (!res.ok) {
+          fillAgent(card, { status: "error", error: networkMessage(res.status, res.body) });
+        } else {
+          fillAgent(card, res.body);
+        }
+      })
+      .catch(function () {
+        fillAgent(card, { status: "error", error: "无法连接到服务，请确认后端正在运行后重试。" });
+      })
+      .finally(function () {
+        busy = false;
+        setSendEnabled();
+        scrollDown();
+        ta.focus();
+      });
+  }
+
+  function networkMessage(httpStatus, body) {
+    if (body && body.detail) return "服务端错误（" + httpStatus + "）：" + body.detail;
+    return "服务端返回错误（HTTP " + httpStatus + "）。";
+  }
+
+  // ── composer behaviour ────────────────────────────────
+  function autosize() {
+    ta.style.height = "auto";
+    ta.style.height = Math.min(ta.scrollHeight, 168) + "px";
+  }
+  function setSendEnabled() {
+    sendBtn.disabled = busy || ta.value.trim() === "";
+  }
+  ta.addEventListener("input", function () { autosize(); setSendEnabled(); });
+  ta.addEventListener("keydown", function (e) {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      ask(ta.value);
+    }
+  });
+  sendBtn.addEventListener("click", function () { ask(ta.value); });
+
+  // ── example chips ─────────────────────────────────────
+  EXAMPLES.forEach(function (q) {
+    var c = el("button", "chip", q);
+    c.type = "button";
+    c.addEventListener("click", function () { ask(q); });
+    chips.appendChild(c);
+  });
+
+  // ── health probe ──────────────────────────────────────
+  (function probe() {
+    var h = document.getElementById("health");
+    var label = document.getElementById("health-label");
+    fetch("/health")
+      .then(function (r) { return r.ok ? r.json() : Promise.reject(); })
+      .then(function () { h.setAttribute("data-state", "up"); label.textContent = "在线"; })
+      .catch(function () { h.setAttribute("data-state", "down"); label.textContent = "离线"; });
+  })();
+
+  setSendEnabled();
+})();
+</script>
+</body>
+</html>

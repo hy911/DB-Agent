@@ -60,6 +60,14 @@ def test_health():
     assert resp.json() == {"status": "ok"}
 
 
+def test_index_serves_ui():
+    with _client(_LLM({}), _Replica([])) as client:
+        resp = client.get("/")
+    assert resp.status_code == 200
+    assert resp.headers["content-type"].startswith("text/html")
+    assert "DB" in resp.text and "/query" in resp.text
+
+
 def test_query_answered_includes_rows():
     llm = _LLM(
         {

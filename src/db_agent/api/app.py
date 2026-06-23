@@ -10,8 +10,10 @@ field); an exception out of run_agent is 502.
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import APIRouter, FastAPI, HTTPException, Request
+from fastapi.responses import FileResponse
 
 from db_agent.api.schemas import QueryRequest, QueryResponse, ResultRows
 from db_agent.config import get_settings
@@ -24,6 +26,14 @@ from db_agent.observability.observer import JsonlObserver, NullObserver, Observe
 from db_agent.semantic import load_semantic_layer
 
 router = APIRouter()
+
+_INDEX_HTML = Path(__file__).resolve().parent.parent / "web" / "index.html"
+
+
+@router.get("/", include_in_schema=False)
+def index() -> FileResponse:
+    """Serve the single-file chat UI; the page calls POST /query itself."""
+    return FileResponse(_INDEX_HTML, media_type="text/html")
 
 
 @router.get("/health")
