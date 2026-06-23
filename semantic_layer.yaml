@@ -30,11 +30,11 @@ tables:
     desc: 鼠肿瘤模型元数据，全库中心枢纽
     pk: model_uuid
     columns:
-      model_uuid:   {type: varchar, desc: 模型唯一标识(连接主键)}
-      model_id:     {type: varchar, desc: 模型业务编号, unique: true}
+      model_uuid:   {type: varchar, desc: 模型唯一标识(全库连接主键，内部UUID，不对用户暴露)}
+      model_id:     {type: varchar, unique: true, desc: '模型业务编号(唯一)。凡用户以"模型ID/model id/模型编号"指代某模型时，一律用此列精确匹配检索，不要用 model_name'}
       model_type:   {type: varchar, desc: 模型类型(配合 second_model_type 判定)}
       second_model_type: {type: varchar, desc: 次级模型类型}
-      model_name:   {type: varchar, desc: 模型名称}
+      model_name:   {type: varchar, desc: '模型名称(自由文本，存在大量同名/变体，如 CT26、CT26-PD-L1...)。仅用于按名称查询；"模型ID/编号"类提问禁止使用本列'}
       cancer_type:  {type: varchar, desc: 癌种}
       cancer_subtype_short_names: {type: varchar, desc: 癌种亚型简称}
       msi_status:   {type: varchar, desc: MSI 微卫星状态}
