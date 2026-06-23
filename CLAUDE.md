@@ -114,12 +114,14 @@ Done:
   emits ONLY a structured `{function, params}` JSON request (data, never code);
   `validate_stat_request` checks it against the frozen `REGISTRY` allowlist + the
   current table's columns + scalar bounds, then a hand-written impl calls
-  scipy/statsmodels/lifelines. **Seven vetted tests** (named test + caveats, no
-  auto-switching): **Welch t-test**, **Mann-Whitney U** (non-parametric two-group),
-  **one-way ANOVA**, **Tukey HSD** (post-hoc pairwise), **two-way ANOVA** (statsmodels),
-  **Kaplan-Meier + log-rank**, **Cox PH regression** (covariates via the `columns`
-  list param role). Dispatch is only ever through the registry dict (no dynamic import);
-  pure in-memory compute
+  scipy/statsmodels/lifelines. **Thirteen vetted tests** (named test + caveats, no
+  auto-switching): **Welch t-test**, **Mann-Whitney U**, **one-way ANOVA**,
+  **Kruskal-Wallis** (non-parametric ANOVA), **Tukey HSD** (post-hoc pairwise),
+  **two-way ANOVA** (statsmodels), **Kaplan-Meier + log-rank**, **Cox PH regression**
+  (covariates via the `columns` list param role), **Spearman** / **Pearson**
+  correlation, **Wilcoxon** signed-rank (paired), **Shapiro-Wilk** normality, and
+  **chi-square** independence. Dispatch is only ever through the registry dict (no
+  dynamic import); pure in-memory compute
   (no file/network/DB); **fail-soft** (any GuardError → degrade to the descriptive
   answer); independent row cap + typeless-scalar reject as defense in depth. Reads
   the post-DuckDB table if present, else the raw result. Injected via `Deps.run_stat`.
@@ -169,8 +171,8 @@ is now **live-verified end-to-end**. Enable with `DBAGENT_EXAMPLE_RERANK=true` (
 
 Still deferred (do not build until asked): **LLM gateway retry/backoff** (largely
 covered now — the gateway config has `num_retries: 2`; client-side backoff is still a
-possible nice-to-have), and yet more stats tests (chi-square, mixed/repeated-measures)
-— pure `sandbox/stats/registry.py` additions once asked.
+possible nice-to-have), and yet more stats tests (Fisher exact, Levene,
+mixed/repeated-measures) — pure `sandbox/stats/registry.py` additions once asked.
 
 **`qwen-reranker` rerank — RESOLVED + live-verified (2026-06-23).** Two layers were
 found and fixed:
