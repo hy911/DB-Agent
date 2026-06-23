@@ -163,3 +163,20 @@ def test_cox_ph_insufficient_events():
     rows = [{"t": 5.0, "e": 0, "dose": 1.0}, {"t": 6.0, "e": 0, "dose": 2.0}]
     with pytest.raises(GuardError):
         cox_ph(rows, {"duration": "t", "event": "e", "covariates": ["dose"]})
+
+
+def test_registry_lists_all_seven_tests():
+    from db_agent.sandbox.stats.registry import REGISTRY, catalog_text
+
+    assert set(REGISTRY) == {
+        "welch_t_test",
+        "one_way_anova",
+        "kaplan_meier",
+        "mann_whitney_u",
+        "tukey_hsd",
+        "two_way_anova",
+        "cox_ph",
+    }
+    cat = catalog_text()
+    assert "cox_ph" in cat
+    assert "covariates (columns)" in cat  # the columns role renders

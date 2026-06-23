@@ -8,7 +8,7 @@ from dataclasses import dataclass
 
 @dataclass(frozen=True)
 class ParamSpec:
-    role: str  # "column" | "scalar"
+    role: str  # "column" | "columns" | "scalar"
     required: bool = True
     py_type: type | None = None  # scalar only: int | float | bool
     bounds: tuple[float, float] | None = None  # scalar numeric: exclusive (lo, hi)

@@ -112,9 +112,12 @@ Done:
   emits ONLY a structured `{function, params}` JSON request (data, never code);
   `validate_stat_request` checks it against the frozen `REGISTRY` allowlist + the
   current table's columns + scalar bounds, then a hand-written impl calls
-  scipy/lifelines. Three vetted tests: **Welch t-test**, **one-way ANOVA**,
-  **Kaplan-Meier + log-rank** (named test + caveats, no auto-switching). Dispatch
-  is only ever through the registry dict (no dynamic import); pure in-memory compute
+  scipy/statsmodels/lifelines. **Seven vetted tests** (named test + caveats, no
+  auto-switching): **Welch t-test**, **Mann-Whitney U** (non-parametric two-group),
+  **one-way ANOVA**, **Tukey HSD** (post-hoc pairwise), **two-way ANOVA** (statsmodels),
+  **Kaplan-Meier + log-rank**, **Cox PH regression** (covariates via the `columns`
+  list param role). Dispatch is only ever through the registry dict (no dynamic import);
+  pure in-memory compute
   (no file/network/DB); **fail-soft** (any GuardError → degrade to the descriptive
   answer); independent row cap + typeless-scalar reject as defense in depth. Reads
   the post-DuckDB table if present, else the raw result. Injected via `Deps.run_stat`.
@@ -163,9 +166,9 @@ is now **live-verified end-to-end**. Enable with `DBAGENT_EXAMPLE_RERANK=true` (
 `DBAGENT_EXAMPLE_INDEX_PATH`).
 
 Still deferred (do not build until asked): `modeling_panel_data` (needs a
-permission-grain decision, see above), **LLM gateway retry/backoff** (nice-to-have now
-that the 504 root cause is fixed — still worth adding for genuine transient blips),
-and more stats tests (two-way ANOVA, post-hoc, Cox regression) — pure
+permission-grain decision, see above), **LLM gateway retry/backoff** (largely covered
+now — the gateway config has `num_retries: 2`; client-side backoff is still a possible
+nice-to-have), and yet more stats tests (chi-square, mixed/repeated-measures) — pure
 `sandbox/stats/registry.py` additions once asked.
 
 **`qwen-reranker` rerank — RESOLVED + live-verified (2026-06-23).** Two layers were
