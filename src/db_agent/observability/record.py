@@ -6,6 +6,7 @@ never captured.
 
 from __future__ import annotations
 
+import uuid
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
@@ -18,6 +19,7 @@ if TYPE_CHECKING:
 
 @dataclass(frozen=True)
 class RunRecord:
+    run_id: str
     ts: str
     question: str
     domain: str | None
@@ -34,16 +36,24 @@ class RunRecord:
     answer: str | None
     clarification: str | None
     error: str | None
-    feedback: str | None = None  # placeholder; always None in Phase 1
+    latency_ms: float | None = None
+    feedback: str | None = None  # placeholder; reserved for future user feedback
 
     @classmethod
-    def from_state(cls, state: AgentState) -> RunRecord:
+    def from_state(
+        cls,
+        state: AgentState,
+        *,
+        run_id: str | None = None,
+        latency_ms: float | None = None,
+    ) -> RunRecord:
         result = state.get("result")
         if result is not None:
             rowcount, columns, truncated = result.rowcount, result.columns, result.truncated
         else:
             rowcount, columns, truncated = None, None, None
         return cls(
+            run_id=run_id or uuid.uuid4().hex,
             ts=datetime.now(UTC).isoformat(),
             question=state["question"],
             domain=state.get("domain"),
@@ -60,6 +70,7 @@ class RunRecord:
             answer=state.get("answer"),
             clarification=state.get("clarification"),
             error=state.get("error"),
+            latency_ms=latency_ms,
         )
 
     def to_dict(self) -> dict:

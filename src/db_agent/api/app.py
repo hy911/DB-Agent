@@ -16,13 +16,15 @@ from fastapi import APIRouter, FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse
 
 from db_agent.api.schemas import QueryRequest, QueryResponse, ResultRows
-from db_agent.config import get_settings
+from db_agent.config import Settings, get_settings
 from db_agent.db import ReadReplica
+from db_agent.db.audit import AuditLog
 from db_agent.examples.retriever import default_retriever
 from db_agent.graph import run_agent
 from db_agent.graph.state import AgentResult, Deps
 from db_agent.llm import LiteLLMClient
 from db_agent.observability.observer import JsonlObserver, NullObserver, Observer
+from db_agent.observability.postgres import PostgresObserver
 from db_agent.semantic import load_semantic_layer
 
 router = APIRouter()
@@ -70,12 +72,26 @@ def _to_response(result: AgentResult) -> QueryResponse:
         )
     return QueryResponse(
         status=result.status,
+        run_id=result.run_id,
         answer=result.answer,
         sql=result.sql,
         clarification=result.clarification,
         error=result.error,
         rows=rows,
     )
+
+
+def _select_observer(s: Settings) -> tuple[Observer, AuditLog | None]:
+    """Pick the recording sink. Recording is on by default: a writable audit DB
+    wins; else an explicit JSONL path; else a default local JSONL file so nothing
+    is lost before the audit DB exists. Returns the AuditLog to close on shutdown.
+    """
+    if s.audit_db_dsn is not None:
+        audit = AuditLog(s)
+        audit.open()
+        return PostgresObserver(audit), audit
+    path = s.observability_log_path or s.default_log_path
+    return JsonlObserver(path), None
 
 
 def create_app(deps: Deps | None = None, observer: Observer | None = None) -> FastAPI:
@@ -92,14 +108,13 @@ def create_app(deps: Deps | None = None, observer: Observer | None = None) -> Fa
                 settings=s,
                 retrieve_examples=default_retriever(s),
             )
-            app.state.observer = (
-                JsonlObserver(s.observability_log_path)
-                if s.observability_log_path is not None
-                else NullObserver()
-            )
+            obs, audit = _select_observer(s)
+            app.state.observer = obs
             try:
                 yield
             finally:
+                if audit is not None:
+                    audit.close()
                 replica.close()
         else:
             app.state.deps = deps

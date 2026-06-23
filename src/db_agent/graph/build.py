@@ -7,6 +7,8 @@ StateGraph with conditional edges for clarification and the self-correction loop
 
 from __future__ import annotations
 
+import time
+import uuid
 from collections.abc import Callable
 from functools import partial
 
@@ -82,10 +84,13 @@ def run_agent(
         deps_kwargs["retrieve_examples"] = retrieve_examples
     deps = Deps(**deps_kwargs)
     graph = build_graph(deps)
+    run_id = uuid.uuid4().hex
+    start = time.perf_counter()
     final = graph.invoke(initial_state(question))
+    latency_ms = (time.perf_counter() - start) * 1000.0
     if observer is not None:
         try:
-            observer(RunRecord.from_state(final))
+            observer(RunRecord.from_state(final, run_id=run_id, latency_ms=latency_ms))
         except Exception:
             pass  # observability is best-effort; never break a good answer
-    return to_result(final)
+    return to_result(final, run_id=run_id)

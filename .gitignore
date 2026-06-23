@@ -219,3 +219,6 @@ __marimo__/
 
 # Django inspectdb input (task material, not project source)
 models.py
+
+# Default observability JSONL sink (runtime artifact)
+logs/

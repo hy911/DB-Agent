@@ -93,7 +93,16 @@ the subdir `CLAUDE.md` files — do not reproduce it here):
 - **few-shot example retrieval + optional two-stage rerank** (off by default). **See
   `src/db_agent/examples/CLAUDE.md`** (incl. the reranker `hosted_vllm` gateway-config
   requirement).
-- **observability**: optional per-run JSONL (`DBAGENT_OBSERVABILITY_LOG_PATH`).
+- **observability**: per-run audit logging, **on by default**. Each run carries a
+  `run_id` (also returned in the API response) + total `latency_ms`. Sink selection
+  (`api/app.py` `_select_observer`): writable Postgres audit table
+  (`DBAGENT_AUDIT_DB_DSN` → `db/audit.py` `AuditLog`, **separate writable role, never
+  the read replica**) > explicit JSONL (`DBAGENT_OBSERVABILITY_LOG_PATH`) > default
+  local JSONL (`logs/agent_runs.jsonl`). Result rows are never stored — only the
+  `RunRecord` summary (rowcount/columns/truncated); `answer` text is kept. Analyze with
+  `python -m db_agent.observability.report` (status mix / failure rate / retry dist /
+  top errors / per-domain / latency p50-p95). `RunRecord.feedback` column is reserved
+  (no UI feedback loop yet).
 - **frontend**: a self-contained chat UI at `GET /` (`src/db_agent/web/index.html`,
   zero deps). Three status branches (answered/clarify/error); collapsible SQL +
   result table; auto-charting (bar / single & grouped multi-series line, inferred
@@ -135,8 +144,9 @@ src/db_agent/
                    #   is_gene_bearing(), tables_in_domain()
   sql/             # PURE guard rails (AST in, secured AST out): validator.py,
                    #   permission.py, secure.py (one-call bridge), errors.py
-  db/              # the ONLY I/O boundary: replica.py (pool + execute + fetch),
-                   #   explain.py, mapping.py, result.py, gene_resolver.py
+  db/              # Postgres boundary: replica.py (read-only pool + execute + fetch),
+                   #   explain.py, mapping.py, result.py, gene_resolver.py;
+                   #   audit.py (SEPARATE writable AuditLog for the run-log table)
   llm/             # LiteLLM client + prompts + tasks (route / generate_sql /
                    #   answer / extract_genes / analyze_sql / request_stat /
                    #   answer_stat); embedding.py (LiteLLMEmbeddingClient);
@@ -154,7 +164,7 @@ src/db_agent/
   api/             # FastAPI: app.py (create_app, POST /query, GET /health, GET /)
   web/             # single-file chat UI (index.html, inline CSS+JS, zero deps);
                    #   served at GET / via FileResponse; auto-charts numeric results
-  observability/   # RunRecord + JsonlObserver (optional per-run logging)
+  observability/   # RunRecord + sinks (Jsonl/Postgres/Null) + report.py analysis CLI
 tests/             # offline default (no DB/LLM); tests/integration/ is -m integration
 ```
 

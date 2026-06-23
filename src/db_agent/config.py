@@ -23,7 +23,15 @@ class Settings(BaseSettings):
     semantic_layer_path: Path = _REPO_ROOT / "semantic_layer.yaml"
 
     # --- observability ---
+    # JSONL fallback sink. When no audit DB is configured, runs are still logged
+    # here (default-on recording) so nothing is lost before the audit DB exists.
     observability_log_path: Path | None = None
+    default_log_path: Path = _REPO_ROOT / "logs" / "agent_runs.jsonl"
+
+    # --- audit log (separate WRITABLE Postgres role/db, never the read replica) ---
+    # When set, per-run records are written to `audit_table` for SQL analysis.
+    audit_db_dsn: str | None = None
+    audit_table: str = "agent_query_log"
 
     # --- read replica (restricted read-only role) ---
     replica_dsn: str = "postgresql://readonly@localhost:5432/tumordb"

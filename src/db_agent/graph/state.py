@@ -84,10 +84,12 @@ class AgentResult:
     clarification: str | None
     error: str | None
     result: QueryResult | None
+    run_id: str | None = None
 
 
-def to_result(state: AgentState) -> AgentResult:
+def to_result(state: AgentState, *, run_id: str | None = None) -> AgentResult:
     return AgentResult(
+        run_id=run_id,
         status=state["status"],
         answer=state.get("answer"),
         sql=state.get("secured_sql"),

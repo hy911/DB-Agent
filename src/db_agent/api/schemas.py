@@ -18,6 +18,7 @@ class ResultRows(BaseModel):
 
 class QueryResponse(BaseModel):
     status: str  # answered | clarify | error
+    run_id: str | None = None
     answer: str | None = None
     sql: str | None = None
     clarification: str | None = None
