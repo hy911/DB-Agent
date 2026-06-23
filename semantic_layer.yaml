@@ -70,7 +70,7 @@ tables:
       strain:       {type: varchar, desc: 鼠品系}
       for_bd:       {type: varchar, desc: 权限：是否对BD可见}
       for_model:    {type: boolean, desc: 业务标记：是否用于建模(布尔，非权限字段)}
-      for_control:  {type: varchar, desc: '对照标记(varchar，非布尔)：T=受试药, C=对照组(含阳性对照药与Vehicle/溶媒等阴性对照)。"对照/阳性药/阳性对照"→ for_control=''C''；"受试药"→''T'''}
+      for_control:  {type: varchar, desc: '对照标记(varchar，非布尔)：T=受试药, C=对照组。仅当用户明确问"对照组/受试组"时才据此过滤。注意："阳性药"不是本字段的概念，遇到"阳性药"类提问不要用 for_control 过滤'}
 
   model_efficacy_tumor_volume_growth_curve_data:
     domain: efficacy
@@ -173,7 +173,7 @@ tables:
       days_when_tumor_volume_1000mm3: {type: float, desc: 瘤体积达 1000mm³ 的天数}
       quality:      {type: varchar, desc: 数据质量}
       for_bd:       {type: varchar, desc: 权限：是否对 BD 可见}
-      for_control:  {type: varchar, desc: '对照标记(varchar，非布尔)：T=受试药, C=对照组(含阳性对照药与Vehicle/溶媒等阴性对照)。"对照/阳性药/阳性对照"→ for_control=''C''；"受试药"→''T'''}
+      for_control:  {type: varchar, desc: '对照标记(varchar，非布尔)：T=受试药, C=对照组。仅当用户明确问"对照组/受试组"时才据此过滤。注意："阳性药"不是本字段的概念，遇到"阳性药"类提问不要用 for_control 过滤'}
       for_model:    {type: boolean, desc: 业务标记：是否用于建模(布尔，非权限字段)}
 
   modeling_tumor_volume_growth_curve_data:
