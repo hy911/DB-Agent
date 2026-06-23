@@ -45,12 +45,19 @@ REGISTRY: dict[str, StatTest] = {
 }
 
 
+def _role_label(spec: ParamSpec) -> str:
+    if spec.role == "column":
+        return "column"
+    if spec.role == "columns":
+        return "columns"
+    return spec.py_type.__name__ if spec.py_type is not None else "scalar"
+
+
 def catalog_text() -> str:
     lines = []
     for t in REGISTRY.values():
         ps = ", ".join(
-            f"{n} ({'column' if s.role == 'column' else s.py_type.__name__}"
-            f"{'' if s.required else ', optional'})"
+            f"{n} ({_role_label(s)}{'' if s.required else ', optional'})"
             for n, s in t.params.items()
         )
         lines.append(f"- {t.name}: {t.description} Params: {ps}")

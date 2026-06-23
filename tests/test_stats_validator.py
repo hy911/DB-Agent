@@ -96,6 +96,41 @@ def test_rejects_non_object_request():
         validate_stat_request("SELECT 1", COLS, REG)
 
 
+def test_accepts_columns_role():
+    reg = {
+        "cov": StatTest(
+            "cov",
+            "covariates test",
+            {"covariates": ParamSpec("columns")},
+            _dummy_run,
+        )
+    }
+    v = validate_stat_request(
+        {"function": "cov", "params": {"covariates": ["value", "other"]}}, COLS, reg
+    )
+    assert v.params["covariates"] == ["value", "other"]
+
+
+def test_rejects_columns_not_a_list():
+    reg = {"cov": StatTest("cov", "c", {"covariates": ParamSpec("columns")}, _dummy_run)}
+    with pytest.raises(GuardError):
+        validate_stat_request({"function": "cov", "params": {"covariates": "value"}}, COLS, reg)
+
+
+def test_rejects_empty_columns_list():
+    reg = {"cov": StatTest("cov", "c", {"covariates": ParamSpec("columns")}, _dummy_run)}
+    with pytest.raises(GuardError):
+        validate_stat_request({"function": "cov", "params": {"covariates": []}}, COLS, reg)
+
+
+def test_rejects_columns_with_unknown_column():
+    reg = {"cov": StatTest("cov", "c", {"covariates": ParamSpec("columns")}, _dummy_run)}
+    with pytest.raises(GuardError):
+        validate_stat_request(
+            {"function": "cov", "params": {"covariates": ["value", "nope"]}}, COLS, reg
+        )
+
+
 def test_rejects_typeless_scalar():
     reg = {
         "bad": StatTest(

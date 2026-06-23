@@ -45,6 +45,17 @@ def validate_stat_request(
                     f"param {pname!r}={val!r} is not a column of the result table",
                     retryable=False,
                 )
+        elif spec.role == "columns":
+            if (
+                not isinstance(val, list)
+                or not val
+                or not all(isinstance(c, str) and c in cols for c in val)
+            ):
+                raise GuardError(
+                    "stat_bad_column",
+                    f"param {pname!r} must be a non-empty list of result columns",
+                    retryable=False,
+                )
         else:  # scalar
             _check_scalar(pname, val, spec)
         clean[pname] = val
