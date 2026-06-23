@@ -56,12 +56,13 @@ Architecture (already agreed, build to these):
   django/auth/rbac system tables, `m_`-prefixed mirror tables, and `*_stats`
   deprecated tables.
 
-## Status (2026-06-22)
+## Status (2026-06-23)
 
 **Phase 1 MVP complete and live-verified** end-to-end through the FastAPI
-endpoint. **Phase 2: DuckDB post-processing + stats inference built** (offline-
-complete + security-reviewed; live e2e gated by the known gateway 504). The full
-chain (all layers built):
+endpoint. **Phase 2 complete + live-verified** — DuckDB post-processing, 13-test
+stats inference, few-shot example retrieval, and two-stage rerank. The chronic
+gateway 504 was root-caused + fixed (Qwen3 thinking mode), so the full chain is now
+live-verified end-to-end. The chain (all layers built):
 
 ```
 domain route / clarify → context assembly (yaml) → SQL gen (qwen-code)
