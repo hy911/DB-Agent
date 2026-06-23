@@ -166,15 +166,23 @@ that the 504 root cause is fixed — still worth adding for genuine transient bl
 and more stats tests (two-way ANOVA, post-hoc, Cox regression) — pure
 `sandbox/stats/registry.py` additions once asked.
 
-**`qwen-reranker` rerank — code BUILT, live BLOCKED on a gateway config fix (probed
-2026-06-22).** The model group `qwen-reranker` exists, but the gateway registers it
-under the **openai provider**, and LiteLLM's rerank route rejects that
-(`/v1/rerank` → 500 `Unsupported provider: openai`); it's also not a chat model
-(`/v1/chat/completions` → 404). The client + retriever integration is built and
-offline-tested (off by default, fail-soft); to make it actually rerank, re-register
-`qwen-reranker` in the gateway config under a rerank-capable provider (infinity / jina
-/ huggingface_rerank / custom) so `/v1/rerank` returns the standard
-`{results:[{index, relevance_score}]}`, then set `DBAGENT_EXAMPLE_RERANK=true`.
+**`qwen-reranker` rerank — code BUILT, live BLOCKED on a gateway-side litellm bug
+(probed 2026-06-23).** Two layers were found:
+1. *(FIXED)* the model was first registered under the `openai` provider → `/v1/rerank`
+   500 `Unsupported provider: openai`. The user re-registered it under `infinity`
+   (`model: infinity/qwen3-reranker-8b`, `mode: rerank`, api_base …:8002) — the
+   provider error is gone and **infinity actually scores the documents now**.
+2. *(STILL BLOCKED)* the gateway's litellm then 500s serializing the response:
+   `3 validation errors for RerankResponse … results.N.document.text: Input should be
+   a valid string` — infinity returns `document` as `{'text': …, 'multi_modal': None}`
+   (a dict) but the gateway's litellm `RerankResponse` expects `document.text` to be a
+   string. `return_documents:false` does NOT help (validation is on the gateway's
+   response model). This is a litellm-version vs infinity-response-shape mismatch,
+   purely gateway-side — our client is correct against the standard contract.
+   **Most likely fix: upgrade litellm on the gateway** (newer versions handle the
+   infinity document object); alternatively make infinity return plain-string
+   documents. Once `/v1/rerank` returns clean `{results:[{index, relevance_score}]}`,
+   set `DBAGENT_EXAMPLE_RERANK=true` — no code change needed.
 
 ### Permission policy (Phase 1, confirmed with the user)
 
