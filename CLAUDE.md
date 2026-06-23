@@ -179,10 +179,17 @@ and more stats tests (two-way ANOVA, post-hoc, Cox regression) — pure
    string. `return_documents:false` does NOT help (validation is on the gateway's
    response model). This is a litellm-version vs infinity-response-shape mismatch,
    purely gateway-side — our client is correct against the standard contract.
-   **Most likely fix: upgrade litellm on the gateway** (newer versions handle the
-   infinity document object); alternatively make infinity return plain-string
-   documents. Once `/v1/rerank` returns clean `{results:[{index, relevance_score}]}`,
-   set `DBAGENT_EXAMPLE_RERANK=true` — no code change needed.
+   **Chosen fix (user, 2026-06-23): upgrade litellm on the gateway** (newer versions
+   handle the infinity document object) — keeps rerank behind the central gateway, no
+   code change needed; once `/v1/rerank` returns clean `{results:[{index,
+   relevance_score}]}`, set `DBAGENT_EXAMPLE_RERANK=true`.
+   *Verified fallback (not adopted):* a **direct** call to the infinity endpoint
+   (`http://172.16.113.1:8002/v1/rerank`, model `qwen3-reranker-8b`) returns 200 with
+   clean `results:[{index, relevance_score, document:{text,…}}]` — our client reads
+   only `index`+`relevance_score` so it would work as-is; adopting it would just need a
+   small `rerank_base_url` setting to bypass the gateway for rerank. Reference:
+   vLLM serves Qwen3-Reranker via `/v1/rerank` with `--hf_overrides` architecture
+   `Qwen3ForSequenceClassification` (document is an object `{text}` by design).
 
 ### Permission policy (Phase 1, confirmed with the user)
 
