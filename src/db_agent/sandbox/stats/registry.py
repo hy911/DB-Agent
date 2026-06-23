@@ -3,16 +3,19 @@
 from __future__ import annotations
 
 from db_agent.sandbox.stats.functions import (
+    chi_square,
     cox_ph,
     kaplan_meier,
     kruskal_wallis,
     mann_whitney_u,
     one_way_anova,
     pearson_correlation,
+    shapiro,
     spearman_correlation,
     tukey_hsd,
     two_way_anova,
     welch_t_test,
+    wilcoxon,
 )
 from db_agent.sandbox.stats.spec import ParamSpec, StatTest
 
@@ -114,6 +117,25 @@ REGISTRY: dict[str, StatTest] = {
             "Pearson linear correlation between two numeric columns.",
             {"x": ParamSpec("column"), "y": ParamSpec("column")},
             pearson_correlation,
+        ),
+        StatTest(
+            "wilcoxon",
+            "Wilcoxon signed-rank test: paired non-parametric comparison of two numeric "
+            "columns (e.g. before vs after on the same subject).",
+            {"x": ParamSpec("column"), "y": ParamSpec("column")},
+            wilcoxon,
+        ),
+        StatTest(
+            "shapiro",
+            "Shapiro-Wilk normality test for a single numeric column.",
+            {"value": ParamSpec("column")},
+            shapiro,
+        ),
+        StatTest(
+            "chi_square",
+            "Chi-square test of independence between two categorical columns.",
+            {"col1": ParamSpec("column"), "col2": ParamSpec("column")},
+            chi_square,
         ),
     )
 }

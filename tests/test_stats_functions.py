@@ -218,6 +218,67 @@ def test_correlation_needs_three_points():
         pearson_correlation(rows, {"x": "x", "y": "y"})
 
 
+def test_wilcoxon_paired_shift():
+    from db_agent.sandbox.stats.functions import wilcoxon
+
+    # y consistently above x by a few units -> significant signed-rank
+    rows = [{"x": float(i), "y": float(i) + 3.0} for i in range(1, 9)]
+    out = wilcoxon(rows, {"x": "x", "y": "y"})
+    assert out.test == "wilcoxon"
+    assert out.stats["p_value"] < 0.05
+    assert out.stats["n_pairs"] == 8.0
+
+
+def test_wilcoxon_needs_enough_pairs():
+    from db_agent.sandbox.stats.functions import wilcoxon
+
+    rows = [{"x": float(i), "y": float(i) + 1.0} for i in range(3)]
+    with pytest.raises(GuardError):
+        wilcoxon(rows, {"x": "x", "y": "y"})
+
+
+def test_shapiro_flags_non_normal():
+    from db_agent.sandbox.stats.functions import shapiro
+
+    # a heavily skewed sample -> reject normality
+    rows = [{"v": float(v)} for v in [1, 1, 1, 1, 1, 1, 1, 2, 3, 100]]
+    out = shapiro(rows, {"value": "v"})
+    assert out.test == "shapiro"
+    assert out.stats["p_value"] < 0.05
+    assert out.stats["n"] == 10.0
+
+
+def test_shapiro_needs_three():
+    from db_agent.sandbox.stats.functions import shapiro
+
+    with pytest.raises(GuardError):
+        shapiro([{"v": 1.0}, {"v": 2.0}], {"value": "v"})
+
+
+def test_chi_square_association():
+    from db_agent.sandbox.stats.functions import chi_square
+
+    # strong association: a=p mostly with b=x; a=q mostly with b=y
+    rows = (
+        [{"a": "p", "b": "x"} for _ in range(20)]
+        + [{"a": "p", "b": "y"} for _ in range(2)]
+        + [{"a": "q", "b": "x"} for _ in range(2)]
+        + [{"a": "q", "b": "y"} for _ in range(20)]
+    )
+    out = chi_square(rows, {"col1": "a", "col2": "b"})
+    assert out.test == "chi_square"
+    assert out.stats["p_value"] < 0.05
+    assert "dof" in out.stats
+
+
+def test_chi_square_needs_two_categories():
+    from db_agent.sandbox.stats.functions import chi_square
+
+    rows = [{"a": "p", "b": "x"} for _ in range(5)]  # one category each
+    with pytest.raises(GuardError):
+        chi_square(rows, {"col1": "a", "col2": "b"})
+
+
 def test_registry_lists_all_tests():
     from db_agent.sandbox.stats.registry import REGISTRY, catalog_text
 
@@ -232,7 +293,10 @@ def test_registry_lists_all_tests():
         "kruskal_wallis",
         "spearman_correlation",
         "pearson_correlation",
+        "wilcoxon",
+        "shapiro",
+        "chi_square",
     }
     cat = catalog_text()
-    assert "cox_ph" in cat
+    assert "cox_ph" in cat and "kruskal_wallis" in cat and "chi_square" in cat
     assert "covariates (columns)" in cat  # the columns role renders

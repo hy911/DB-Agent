@@ -340,6 +340,95 @@ def pearson_correlation(rows, params) -> StatResult:
     )
 
 
+def wilcoxon(rows, params) -> StatResult:
+    from scipy import stats as _stats
+
+    xs, ys = _paired_values(rows, params["x"], params["y"])
+    if len(xs) < 6:
+        raise GuardError(
+            "stat_insufficient_n", "Wilcoxon needs at least 6 paired observations", retryable=False
+        )
+    try:
+        res = _stats.wilcoxon(xs, ys)
+    except ValueError as e:  # e.g. all differences zero
+        raise GuardError("stat_fit_error", str(e).strip()[:200], retryable=False) from e
+    p = float(res.pvalue)
+    caveats = [
+        "Wilcoxon signed-rank (paired, non-parametric); tests the median of paired differences.",
+        _significance(p, 0.05),
+    ]
+    return StatResult(
+        test="wilcoxon",
+        stats={"w": float(res.statistic), "p_value": p, "n_pairs": float(len(xs))},
+        groups=[],
+        caveats=caveats,
+    )
+
+
+def shapiro(rows, params) -> StatResult:
+    from scipy import stats as _stats
+
+    vals = _column_values(rows, params["value"])
+    if len(vals) < 3:
+        raise GuardError("stat_insufficient_n", "Shapiro needs at least 3 values", retryable=False)
+    caveats = ["Shapiro-Wilk normality test.", "Over-sensitive on very large samples."]
+    used = vals
+    if len(vals) > 5000:
+        used = vals[:5000]
+        caveats.append("n>5000: tested the first 5000 values (Shapiro p is unreliable above 5000).")
+    res = _stats.shapiro(used)
+    p = float(res.pvalue)
+    caveats.append(
+        "p < 0.05 suggests the data is not normally distributed."
+        if p < 0.05
+        else "No strong evidence against normality."
+    )
+    return StatResult(
+        test="shapiro",
+        stats={"w": float(res.statistic), "p_value": p, "n": float(len(used))},
+        groups=[],
+        caveats=caveats,
+    )
+
+
+def chi_square(rows, params) -> StatResult:
+    import pandas as pd
+    from scipy import stats as _stats
+
+    c1, c2 = params["col1"], params["col2"]
+    a: list[str] = []
+    b: list[str] = []
+    for r in rows:
+        x, y = r.get(c1), r.get(c2)
+        if x is None or y is None:
+            continue
+        a.append(str(x))
+        b.append(str(y))
+    if not a:
+        raise GuardError("stat_insufficient_n", "no rows with both categories", retryable=False)
+    table = pd.crosstab(pd.Series(a), pd.Series(b))
+    if table.shape[0] < 2 or table.shape[1] < 2:
+        raise GuardError(
+            "stat_group_count", "each variable needs at least 2 categories", retryable=False
+        )
+    if table.shape[0] > _MAX_GROUPS or table.shape[1] > _MAX_GROUPS:
+        raise GuardError(
+            "stat_group_count", f"too many categories (> {_MAX_GROUPS})", retryable=False
+        )
+    chi2, p, dof, _expected = _stats.chi2_contingency(table.values)
+    caveats = [
+        "Chi-square test of independence between two categorical variables.",
+        "Validity assumes expected cell counts >= 5.",
+        _significance(float(p), 0.05),
+    ]
+    return StatResult(
+        test="chi_square",
+        stats={"chi2": float(chi2), "p_value": float(p), "dof": float(dof)},
+        groups=[],
+        caveats=caveats,
+    )
+
+
 def two_way_anova(rows, params) -> StatResult:
     import pandas as pd
     import statsmodels.formula.api as smf
