@@ -73,12 +73,18 @@ def test_modeling_detail_tables_join_to_hub():
         "modeling_total_flux_data",
         "modeling_elisa_data",
         "modeling_pathology_data",
+        "modeling_panel_data",
     }
     for t in details:
         assert t.access_via == "modeling_attr_info"
-        assert t.join_to_hub == ("model_uuid", "model_no", "group_id")
+        if t.name == "modeling_panel_data":
+            assert t.join_to_hub == ("model_uuid", "model_no")  # no group_id
+        else:
+            assert t.join_to_hub == ("model_uuid", "model_no", "group_id")
 
 
-def test_modeling_panel_excluded():
-    # panel lacks group_id; deliberately not added (would coarsen permission grain)
-    assert LAYER.get_table("modeling_panel_data") is None
+def test_modeling_panel_included_two_key_grain():
+    t = LAYER.get_table("modeling_panel_data")
+    assert t is not None
+    assert t.access_via == "modeling_attr_info"
+    assert t.join_to_hub == ("model_uuid", "model_no")

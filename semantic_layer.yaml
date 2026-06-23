@@ -289,6 +289,18 @@ tables:
       detection_item: {type: varchar, desc: 检测项}
       val:            {type: float, desc: 检测值}
 
+  modeling_panel_data:
+    domain: modeling
+    desc: 建模-panel检测(模型级，无实验分组)
+    access_via: modeling_attr_info
+    join_to_hub: [model_uuid, model_no]
+    columns:
+      model_uuid:     {type: varchar, desc: 模型spine键}
+      model_no:       {type: varchar, desc: 建模编号(枢纽连接键)}
+      panel:          {type: varchar, desc: 检测panel}
+      detection_item: {type: varchar, desc: 检测项}
+      update_date:    {type: date, desc: 更新日期}
+
   gene_info:
     domain: reference
     desc: 基因字典(当前权威表)，symbol 唯一

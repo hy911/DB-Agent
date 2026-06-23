@@ -137,4 +137,22 @@ def test_injection_config_for_modeling_built_from_layer():
     assert cfg.detail_join_keys["modeling_tumor_volume_growth_curve_data"] == keys
     assert cfg.detail_join_keys["modeling_body_weight_growth_curve_data"] == keys
     assert cfg.detail_join_keys["modeling_survival_data"] == keys
+    assert cfg.detail_join_keys["modeling_panel_data"] == ("model_uuid", "model_no")
     assert "modeling_attr_info" in cfg.controlled_tables
+
+
+def test_modeling_panel_data_gets_two_key_exists():
+    from db_agent.config import Settings
+    from db_agent.semantic import load_semantic_layer
+    from db_agent.sql.secure import secure_query
+
+    layer = load_semantic_layer(Settings(_env_file=None).semantic_layer_path)
+    secured = secure_query(
+        "SELECT panel, detection_item FROM modeling_panel_data", layer, "modeling"
+    )
+    sql = secured.sql.lower()
+    assert "exists" in sql
+    assert "modeling_attr_info" in sql
+    assert "for_bd" in sql
+    assert "model_no" in sql
+    assert "group_id" not in sql  # panel has no group_id -> 2-key semi-join only
