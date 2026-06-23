@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 from db_agent.sandbox.stats.functions import (
+    cox_ph,
     kaplan_meier,
     mann_whitney_u,
     one_way_anova,
     tukey_hsd,
+    two_way_anova,
     welch_t_test,
 )
 from db_agent.sandbox.stats.spec import ParamSpec, StatTest
@@ -67,6 +69,29 @@ REGISTRY: dict[str, StatTest] = {
                 "group": ParamSpec("column"),
             },
             tukey_hsd,
+        ),
+        StatTest(
+            "two_way_anova",
+            "Two-way ANOVA of a numeric value across two categorical factors and their "
+            "interaction.",
+            {
+                "value": ParamSpec("column"),
+                "factor1": ParamSpec("column"),
+                "factor2": ParamSpec("column"),
+            },
+            two_way_anova,
+        ),
+        StatTest(
+            "cox_ph",
+            "Cox proportional-hazards regression: effect of one or more covariates on "
+            "survival. duration=time-to-event, event=1 observed/0 censored, "
+            "covariates=numeric columns.",
+            {
+                "duration": ParamSpec("column"),
+                "event": ParamSpec("column"),
+                "covariates": ParamSpec("columns"),
+            },
+            cox_ph,
         ),
     )
 }

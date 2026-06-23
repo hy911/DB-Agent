@@ -118,3 +118,48 @@ def test_tukey_needs_two_groups():
     rows = [{"g": "a", "v": 1.0}, {"g": "a", "v": 2.0}]
     with pytest.raises(GuardError):
         tukey_hsd(rows, {"value": "v", "group": "g"})
+
+
+def test_two_way_anova_detects_main_effect():
+    from db_agent.sandbox.stats.functions import two_way_anova
+
+    # factor a drives y (x~low, y~high); factor b does not
+    rows = []
+    for b in ("p", "q"):
+        rows += [{"a": "x", "b": b, "v": v} for v in (1.0, 2.0, 1.5)]
+        rows += [{"a": "y", "b": b, "v": v} for v in (9.0, 8.0, 8.5)]
+    out = two_way_anova(rows, {"value": "v", "factor1": "a", "factor2": "b"})
+    assert out.test == "two_way_anova"
+    assert out.stats["factor1_p"] < 0.05
+    assert "factor2_p" in out.stats and "interaction_p" in out.stats
+    assert len(out.groups) == 4  # 2x2 cells
+
+
+def test_two_way_anova_needs_two_levels():
+    from db_agent.sandbox.stats.functions import two_way_anova
+
+    rows = [{"a": "x", "b": "p", "v": float(i)} for i in range(6)]  # one level each
+    with pytest.raises(GuardError):
+        two_way_anova(rows, {"value": "v", "factor1": "a", "factor2": "b"})
+
+
+def test_cox_ph_detects_covariate_effect():
+    from db_agent.sandbox.stats.functions import cox_ph
+
+    # higher dose -> shorter survival (events all observed)
+    rows = []
+    for i in range(12):
+        dose = float(i % 4)
+        rows.append({"t": 20.0 - 3.0 * dose + (i % 2), "e": 1, "dose": dose})
+    out = cox_ph(rows, {"duration": "t", "event": "e", "covariates": ["dose"]})
+    assert out.test == "cox_ph"
+    assert "dose hazard_ratio" in out.stats and "dose p" in out.stats
+    assert out.groups[0]["n"] == 12
+
+
+def test_cox_ph_insufficient_events():
+    from db_agent.sandbox.stats.functions import cox_ph
+
+    rows = [{"t": 5.0, "e": 0, "dose": 1.0}, {"t": 6.0, "e": 0, "dose": 2.0}]
+    with pytest.raises(GuardError):
+        cox_ph(rows, {"duration": "t", "event": "e", "covariates": ["dose"]})

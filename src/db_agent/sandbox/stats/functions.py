@@ -239,3 +239,123 @@ def tukey_hsd(rows, params) -> StatResult:
         ],
         caveats=caveats,
     )
+
+
+def two_way_anova(rows, params) -> StatResult:
+    import pandas as pd
+    import statsmodels.formula.api as smf
+    from statsmodels.stats.anova import anova_lm
+
+    v, f1, f2 = params["value"], params["factor1"], params["factor2"]
+    recs = []
+    for r in rows:
+        val, a, b = r.get(v), r.get(f1), r.get(f2)
+        if val is None or a is None or b is None:
+            continue
+        fv = _to_float(v, val)
+        if math.isnan(fv):
+            continue
+        recs.append({"y": fv, "a": str(a), "b": str(b)})
+    if len(recs) < 4:
+        raise GuardError("stat_insufficient_n", "two-way ANOVA needs more rows", retryable=False)
+    df = pd.DataFrame(recs)
+    if df["a"].nunique() < 2 or df["b"].nunique() < 2:
+        raise GuardError("stat_group_count", "each factor needs at least 2 levels", retryable=False)
+    ncells = df.groupby(["a", "b"], observed=True).ngroups
+    if ncells > _MAX_GROUPS:
+        raise GuardError("stat_group_count", f"too many cells ({ncells})", retryable=False)
+    try:
+        model = smf.ols("y ~ C(a) + C(b) + C(a):C(b)", data=df).fit()
+        table = anova_lm(model, typ=2)
+    except Exception as e:  # singular design / unfittable
+        raise GuardError("stat_fit_error", str(e).strip()[:200], retryable=False) from e
+
+    def _fp(name: str) -> tuple[float, float]:
+        return float(table.loc[name, "F"]), float(table.loc[name, "PR(>F)"])
+
+    f1_F, f1_p = _fp("C(a)")
+    f2_F, f2_p = _fp("C(b)")
+    i_F, i_p = _fp("C(a):C(b)")
+    groups = [
+        {"factor1": a, "factor2": b, "n": int(len(g)), "mean": float(g["y"].mean())}
+        for (a, b), g in df.groupby(["a", "b"], observed=True)
+    ]
+    caveats = [
+        "Two-way ANOVA (type II sums of squares).",
+        "Assumes normal residuals and homogeneous variances across cells.",
+    ]
+    return StatResult(
+        test="two_way_anova",
+        stats={
+            "factor1_F": f1_F,
+            "factor1_p": f1_p,
+            "factor2_F": f2_F,
+            "factor2_p": f2_p,
+            "interaction_F": i_F,
+            "interaction_p": i_p,
+        },
+        groups=groups,
+        caveats=caveats,
+    )
+
+
+def cox_ph(rows, params) -> StatResult:
+    import pandas as pd
+    from lifelines import CoxPHFitter
+
+    dur, ev = params["duration"], params["event"]
+    covariates = params["covariates"]
+    recs = []
+    for r in rows:
+        d, e = r.get(dur), r.get(ev)
+        if d is None or e is None:
+            continue
+        df_dur = _to_float(dur, d)
+        if math.isnan(df_dur) or df_dur < 0:
+            continue
+        ei = int(_to_float(ev, e))
+        if ei not in (0, 1):
+            raise GuardError(
+                "stat_bad_value", f"event column {ev!r} must be 0 or 1, got {e!r}", retryable=False
+            )
+        rec = {"_duration": df_dur, "_event": ei}
+        ok = True
+        for c in covariates:
+            cv = r.get(c)
+            if cv is None:
+                ok = False
+                break
+            fcv = _to_float(c, cv)
+            if math.isnan(fcv):
+                ok = False
+                break
+            rec[c] = fcv
+        if ok:
+            recs.append(rec)
+    n_events = sum(r["_event"] for r in recs)
+    if len(recs) < 3 or n_events < 2:
+        raise GuardError(
+            "stat_insufficient_n",
+            "not enough survival observations/events for Cox",
+            retryable=False,
+        )
+    df = pd.DataFrame(recs)
+    try:
+        cph = CoxPHFitter()
+        cph.fit(df, duration_col="_duration", event_col="_event")
+    except Exception as e:  # singular / non-converging fit
+        raise GuardError("stat_fit_error", str(e).strip()[:200], retryable=False) from e
+    stats: dict[str, float] = {}
+    for c in covariates:
+        stats[f"{c} hazard_ratio"] = float(cph.hazard_ratios_[c])
+        stats[f"{c} p"] = float(cph.summary.loc[c, "p"])
+    caveats = [
+        "Cox proportional-hazards regression; event=1 observed, event=0 censored.",
+        "Assumes proportional hazards; needs enough events per covariate (rule of thumb >=10).",
+    ]
+    return StatResult(
+        test="cox_ph",
+        stats=stats,
+        groups=[{"label": "all", "n": len(df)}],
+        caveats=caveats,
+    )
