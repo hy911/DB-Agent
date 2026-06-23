@@ -464,6 +464,15 @@ def test_assemble_context_modeling_has_permission_note():
     assert "do not" in ctx.lower()  # permission note present (access-controlled)
 
 
+def test_assemble_context_modeling_includes_panel():
+    deps = _deps()
+    s = initial_state("q")
+    s["domain"] = "modeling"
+    ctx = assemble_context_node(s, deps)["context"]
+    assert "modeling_panel_data" in ctx
+    assert "do not" in ctx.lower()  # still access-controlled
+
+
 def test_stats_node_runs_when_request_returned():
     from db_agent.sandbox.stats.spec import StatResult
 

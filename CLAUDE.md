@@ -87,9 +87,11 @@ Done:
   2) filtered by `EXISTS` semi-join on `(model_uuid, model_no, group_id)`. Added as
   a **pure `semantic_layer.yaml` change** (zero source changes) — the **first
   access-controlled domain added via config**, exercising the real permission-
-  injection path (not the no-op). `modeling_panel_data` is intentionally excluded
-  (no `group_id` → can't use the 3-key semi-join without coarsening the permission
-  grain; revisit only with an explicit grain decision).
+  injection path (not the no-op). `modeling_panel_data` (added 2026-06-23) is the
+  **9th detail table**: model-level (no `group_id`), filtered by a **2-key**
+  `(model_uuid, model_no)` EXISTS at the **any-visible grain** (visible if any group of
+  the model is `for_bd='yes'`) — an explicit user grain decision; pure YAML, proving
+  the injector is key-count generic. SQL-security-reviewed SOUND.
 - **resolve_gene** tool (`db/gene_resolver.py`): deterministic gene-name →
   canonical symbol (case-sensitive exact + pg_trgm fuzzy as clarify-only
   candidates).
@@ -165,11 +167,10 @@ the full two-stage chain (embed → cosine candidates → gateway `qwen-reranker
 is now **live-verified end-to-end**. Enable with `DBAGENT_EXAMPLE_RERANK=true` (+
 `DBAGENT_EXAMPLE_INDEX_PATH`).
 
-Still deferred (do not build until asked): `modeling_panel_data` (needs a
-permission-grain decision, see above), **LLM gateway retry/backoff** (largely covered
-now — the gateway config has `num_retries: 2`; client-side backoff is still a possible
-nice-to-have), and yet more stats tests (chi-square, mixed/repeated-measures) — pure
-`sandbox/stats/registry.py` additions once asked.
+Still deferred (do not build until asked): **LLM gateway retry/backoff** (largely
+covered now — the gateway config has `num_retries: 2`; client-side backoff is still a
+possible nice-to-have), and yet more stats tests (chi-square, mixed/repeated-measures)
+— pure `sandbox/stats/registry.py` additions once asked.
 
 **`qwen-reranker` rerank — RESOLVED + live-verified (2026-06-23).** Two layers were
 found and fixed:
