@@ -9,9 +9,10 @@ meta:
   spine_key: model_uuid          # 全库连接主键，几乎所有业务表都靠它关联 model_desc_info
   gene_key: gene_symbol          # 组学侧连接键，关联 gene_info.symbol
   default_expression_table: model_ccle_expression_data
-  access_control:                # 行级权限：药效/建模域必须按用户属性过滤这些字段
-    fields: [for_bd, for_model, for_control, drug_classification]
-    note: 明细表不带这些字段，需 JOIN 到对应枢纽表(model_efficacy_info)再过滤
+  access_control:                # 行级权限：当前策略只强制 for_bd='yes'（注入器硬编码）
+    fields: [for_bd]             # 仅此字段受权限保护、禁止模型自行过滤；
+                                 # for_control/for_model/drug_classification 是可查询的业务字段，不是权限字段
+    note: 明细表不带 for_bd，需 JOIN 到对应枢纽表(model_efficacy_info)再过滤
 
 # ----------- 域划分（路由用） -----------
 domains:
@@ -63,13 +64,13 @@ tables:
       drug_dosage:  {type: varchar, desc: 给药剂量}
       drug_route:   {type: varchar, desc: 给药途径}
       drug_schedule: {type: varchar, desc: 给药方案}
-      drug_classification: {type: varchar, desc: 药物分类(权限过滤字段)}
+      drug_classification: {type: varchar, desc: 药物分类编码(数字字符串，多为空；非权限字段)}
       tgi_tv:       {type: decimal, desc: 肿瘤生长抑制率(药效核心指标)}
       tumor_volume_when_starting_treatment: {type: decimal, desc: 给药起始时瘤体积}
       strain:       {type: varchar, desc: 鼠品系}
       for_bd:       {type: varchar, desc: 权限：是否对BD可见}
-      for_model:    {type: boolean, desc: 权限：是否用于建模}
-      for_control:  {type: varchar, desc: 权限：是否对照}
+      for_model:    {type: boolean, desc: 业务标记：是否用于建模(布尔，非权限字段)}
+      for_control:  {type: varchar, desc: '对照标记(varchar，非布尔)：T=受试药, C=对照组(含阳性对照药与Vehicle/溶媒等阴性对照)。"对照/阳性药/阳性对照"→ for_control=''C''；"受试药"→''T'''}
 
   model_efficacy_tumor_volume_growth_curve_data:
     domain: efficacy
@@ -172,8 +173,8 @@ tables:
       days_when_tumor_volume_1000mm3: {type: float, desc: 瘤体积达 1000mm³ 的天数}
       quality:      {type: varchar, desc: 数据质量}
       for_bd:       {type: varchar, desc: 权限：是否对 BD 可见}
-      for_control:  {type: varchar, desc: 权限：是否对照}
-      for_model:    {type: boolean, desc: 权限：是否用于建模}
+      for_control:  {type: varchar, desc: '对照标记(varchar，非布尔)：T=受试药, C=对照组(含阳性对照药与Vehicle/溶媒等阴性对照)。"对照/阳性药/阳性对照"→ for_control=''C''；"受试药"→''T'''}
+      for_model:    {type: boolean, desc: 业务标记：是否用于建模(布尔，非权限字段)}
 
   modeling_tumor_volume_growth_curve_data:
     domain: modeling
