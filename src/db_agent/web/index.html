@@ -407,6 +407,9 @@
   .chart-host .area { fill: var(--accent); opacity: 0.08; }
   .chart-host .dot { fill: var(--surface); stroke: var(--accent); stroke-width: 1.5; }
   .chart-note { padding: 0 12px 10px; font-size: 11px; color: var(--ink-faint); }
+  .chart-legend { display: flex; flex-wrap: wrap; gap: 5px 16px; padding: 4px 12px 6px; }
+  .chart-legend span { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; color: var(--ink-soft); font-family: var(--font-mono); }
+  .chart-legend i { width: 12px; height: 3px; border-radius: 2px; display: inline-block; }
 
   /* thinking indicator */
   .thinking {
@@ -742,10 +745,26 @@
     return String(Math.round(n * 100) / 100);
   }
 
+  // column-name hints
+  var ID_RE = /(^|_)(id|no|num|gid|group|arm|cohort)(_|$)|编号|分组|组别|代次/i;
+  var GROUP_RE = /group|arm|cohort|组|代次/i;
+  var SEQ_RE = /day|time|week|month|date|hour|cycle|timepoint|天|周|月|日|时间|周期|代次/i;
+
+  function distinctCount(data, col) {
+    var seen = {}, n = 0;
+    for (var i = 0; i < data.length; i++) {
+      var v = data[i][col];
+      var key = v == null ? " " : String(v);
+      if (!(key in seen)) { seen[key] = 1; n++; }
+    }
+    return n;
+  }
+
   // Decide whether a result set is chartable and how. Heuristic, domain-tuned:
-  //   · need a label/x column + at least one numeric column, and >= 2 rows
+  //   · need a label/x column + at least one numeric MEASURE column, and >= 2 rows
   //   · a sequential x (numeric, or a name hinting day/time/cycle) -> line (trends)
   //   · otherwise a categorical comparison -> bar
+  //   · a second low-cardinality column (group_id, arm, …) -> split a line into series
   function inferChart(rows) {
     var cols = rows.columns || [];
     var data = rows.rows || [];
@@ -753,12 +772,32 @@
     var numCols = cols.filter(function (c) { return columnNumeric(data, c); });
     if (numCols.length === 0) return null;
     var catCols = cols.filter(function (c) { return numCols.indexOf(c) < 0; });
-    var xCol = catCols.length ? catCols[0] : cols[0];
-    var yCols = numCols.filter(function (c) { return c !== xCol; });
-    if (yCols.length === 0) return null;
-    var seqHint = /day|time|week|month|date|hour|cycle|天|周|月|日|时间|周期/i.test(xCol);
-    var type = columnNumeric(data, xCol) || seqHint ? "line" : "bar";
-    return { type: type, xCol: xCol, yCols: yCols, yCol: yCols[0] };
+    // x-axis: a sequence column (day/cycle/…) wins even when it's numeric and a
+    // categorical group column is also present — that's the growth-curve shape.
+    var seqCols = cols.filter(function (c) { return SEQ_RE.test(c); });
+    var xCol = seqCols.length ? seqCols[0] : catCols.length ? catCols[0] : cols[0];
+
+    // measures (y candidates): numeric, not x, not id/group-like
+    var measures = numCols.filter(function (c) { return c !== xCol && !ID_RE.test(c); });
+    if (measures.length === 0) measures = numCols.filter(function (c) { return c !== xCol; });
+    if (measures.length === 0) return null;
+
+    // group candidates: other low-cardinality columns whose values repeat across x
+    var groupCols = cols.filter(function (c) {
+      if (c === xCol || measures.indexOf(c) >= 0) return false;
+      var dc = distinctCount(data, c);
+      return dc >= 2 && dc <= 12 && dc < data.length;
+    });
+    var groupCol = null;
+    if (groupCols.length) {
+      var named = groupCols.filter(function (c) { return GROUP_RE.test(c); });
+      groupCol = named.length
+        ? named[0]
+        : groupCols.slice().sort(function (a, b) { return distinctCount(data, a) - distinctCount(data, b); })[0];
+    }
+
+    var type = columnNumeric(data, xCol) || SEQ_RE.test(xCol) ? "line" : "bar";
+    return { type: type, xCol: xCol, yCols: measures, yCol: measures[0], groupCols: groupCols, groupCol: groupCol };
   }
 
   function buildChart(rows) {
@@ -793,29 +832,49 @@
       sel.value = spec.yCol;
       controls.appendChild(sel);
     }
+
+    var gsel = null;
+    if (spec.groupCols && spec.groupCols.length) {
+      controls.appendChild(el("span", "ctl-label", "分组"));
+      gsel = el("select");
+      var none = el("option", null, "不分组"); none.value = "__none__"; gsel.appendChild(none);
+      spec.groupCols.forEach(function (c) {
+        var o = el("option", null, c); o.value = c; gsel.appendChild(o);
+      });
+      gsel.value = spec.groupCol || "__none__";
+      controls.appendChild(gsel);
+    }
     panel.appendChild(controls);
     var host = el("div", "chart-host");
     panel.appendChild(host);
     d.appendChild(panel);
 
-    var state = { type: spec.type, yCol: spec.yCol };
+    var state = { type: spec.type, yCol: spec.yCol, groupCol: spec.groupCol || "__none__" };
     function sync() {
       bBar.setAttribute("aria-pressed", String(state.type === "bar"));
       bLine.setAttribute("aria-pressed", String(state.type === "line"));
-      meta.textContent = state.yCol;
-      renderChart(host, panel, data, spec.xCol, state.yCol, state.type);
+      var grouped = state.type === "line" && state.groupCol !== "__none__";
+      meta.textContent = state.yCol + (grouped ? " · 按 " + state.groupCol : "");
+      renderChart(host, panel, data, spec.xCol, state.yCol, state.type, state.groupCol);
     }
     bBar.addEventListener("click", function () { state.type = "bar"; sync(); });
     bLine.addEventListener("click", function () { state.type = "line"; sync(); });
     if (sel) sel.addEventListener("change", function () { state.yCol = sel.value; sync(); });
+    if (gsel) gsel.addEventListener("change", function () { state.groupCol = gsel.value; sync(); });
     sync();
     return d;
   }
 
-  function renderChart(host, panel, data, xCol, yCol, type) {
+  var SERIES_COLORS = ["#0c6e63", "#2f5c8f", "#946410", "#a23a33", "#5a7d3c", "#7a4f9e", "#b5651d", "#3a7ca5"];
+
+  function renderChart(host, panel, data, xCol, yCol, type, groupCol) {
     host.innerHTML = "";
     var prevNote = panel.querySelector(".chart-note");
     if (prevNote) prevNote.remove();
+
+    if (type === "line" && groupCol && groupCol !== "__none__") {
+      return renderMultiLine(host, panel, data, xCol, yCol, groupCol);
+    }
 
     var pts = [];
     for (var i = 0; i < data.length; i++) {
@@ -903,6 +962,85 @@
 
     host.appendChild(svg);
     if (capped) panel.appendChild(el("div", "chart-note", "图表仅展示前 " + n + " 个数据点。"));
+  }
+
+  function renderMultiLine(host, panel, data, xCol, yCol, groupCol) {
+    var xIndex = {}, xs = [], groups = {}, gorder = [];
+    for (var i = 0; i < data.length; i++) {
+      var y = asNum(data[i][yCol]);
+      if (y === null) continue;
+      var xv = data[i][xCol] == null ? "—" : String(data[i][xCol]);
+      if (!(xv in xIndex)) { xIndex[xv] = xs.length; xs.push(xv); }
+      var g = data[i][groupCol] == null ? "—" : String(data[i][groupCol]);
+      if (!(g in groups)) { groups[g] = []; gorder.push(g); }
+      groups[g].push({ xi: xIndex[xv], y: y });
+    }
+    if (!xs.length || !gorder.length) { host.appendChild(el("div", "chart-note", "无可绘制的数值。")); return; }
+    var cappedG = false;
+    if (gorder.length > 8) { gorder = gorder.slice(0, 8); cappedG = true; }
+
+    var W = 680, H = 292, pad = { l: 48, r: 14, t: 14, b: 52 };
+    var pw = W - pad.l - pad.r, ph = H - pad.t - pad.b, nx = xs.length;
+    var allY = [];
+    gorder.forEach(function (g) { groups[g].forEach(function (p) { allY.push(p.y); }); });
+    var ymin = Math.min(0, Math.min.apply(null, allY)), ymax = Math.max.apply(null, allY);
+    if (ymax === ymin) ymax = ymin + 1;
+    function yPix(v) { return pad.t + ph * (1 - (v - ymin) / (ymax - ymin)); }
+    var step = pw / nx;
+    function xPix(xi) { return pad.l + step * xi + step / 2; }
+    var rotate = nx > 8, labelEvery = Math.ceil(nx / (rotate ? 24 : 12));
+
+    var legend = el("div", "chart-legend");
+    gorder.forEach(function (g, gi) {
+      var sp = el("span");
+      var sw = el("i"); sw.style.background = SERIES_COLORS[gi % SERIES_COLORS.length];
+      sp.appendChild(sw);
+      sp.appendChild(el("span", null, g.length > 18 ? g.slice(0, 17) + "…" : g));
+      legend.appendChild(sp);
+    });
+    host.appendChild(legend);
+
+    var svg = sv("svg", { viewBox: "0 0 " + W + " " + H, preserveAspectRatio: "xMidYMid meet", role: "img" });
+    for (var t = 0; t <= 4; t++) {
+      var val = ymin + (ymax - ymin) * t / 4, gy = yPix(val);
+      svg.appendChild(sv("line", { class: "grid", x1: pad.l, y1: gy, x2: W - pad.r, y2: gy }));
+      var tk = sv("text", { class: "tick", x: pad.l - 6, y: gy + 3, "text-anchor": "end" });
+      tk.textContent = fmt(val); svg.appendChild(tk);
+    }
+    svg.appendChild(sv("line", { class: "axis", x1: pad.l, y1: pad.t, x2: pad.l, y2: pad.t + ph }));
+
+    gorder.forEach(function (g, gi) {
+      var color = SERIES_COLORS[gi % SERIES_COLORS.length];
+      var seq = groups[g].slice().sort(function (a, b) { return a.xi - b.xi; });
+      var dPath = seq.map(function (p, idx) {
+        return (idx ? "L" : "M") + xPix(p.xi).toFixed(1) + " " + yPix(p.y).toFixed(1);
+      }).join(" ");
+      svg.appendChild(sv("path", {
+        d: dPath, fill: "none", stroke: color,
+        "stroke-width": 2, "stroke-linejoin": "round", "stroke-linecap": "round"
+      }));
+      seq.forEach(function (p) {
+        var c = sv("circle", { cx: xPix(p.xi), cy: yPix(p.y), r: 2.6, fill: "#fcfcfb", stroke: color, "stroke-width": 1.5 });
+        var tt = sv("title"); tt.textContent = g + " · " + xs[p.xi] + ": " + fmt(p.y); c.appendChild(tt);
+        svg.appendChild(c);
+      });
+    });
+
+    xs.forEach(function (xv, idx) {
+      if (idx % labelEvery !== 0 && idx !== nx - 1) return;
+      var cx = xPix(idx), lab = xv.length > 10 ? xv.slice(0, 9) + "…" : xv, baseY = pad.t + ph + (rotate ? 10 : 14);
+      var tEl = sv("text", { class: "xlab", x: cx, y: baseY });
+      if (rotate) {
+        tEl.setAttribute("text-anchor", "end");
+        tEl.setAttribute("transform", "rotate(-38 " + cx + " " + baseY + ")");
+      } else {
+        tEl.setAttribute("text-anchor", "middle");
+      }
+      tEl.textContent = lab; svg.appendChild(tEl);
+    });
+
+    host.appendChild(svg);
+    if (cappedG) panel.appendChild(el("div", "chart-note", "仅展示前 8 个分组。"));
   }
 
   // ── send flow ─────────────────────────────────────────
