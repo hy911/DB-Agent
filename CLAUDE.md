@@ -151,14 +151,16 @@ zero extra calls); **fail-soft** (missing/corrupt index or embed failure → no
 examples, generation proceeds as before). Embedding seam is `llm/embedding.py`
 (`LiteLLMEmbeddingClient`), injected via `Deps.retrieve_examples`.
 
-**Optional second-stage rerank built (2026-06-23, off by default, live-blocked).**
+**Optional second-stage rerank built + LIVE-VERIFIED (2026-06-23, off by default).**
 `llm/rerank.py` (`LiteLLMRerankClient`) targets the standard rerank contract
 (`POST /v1/rerank {model,query,documents,top_n}` → `{results:[{index,relevance_score}]}`).
 When `Settings.example_rerank=True`, `make_retriever` fetches a larger cosine top-N
 (`example_rerank_candidates`, default 10) then reorders to `example_top_k` via
-`qwen-reranker`; **fail-soft** (any rerank error → cosine top-k). Built against the
-contract + fully offline-tested, but **live still blocked** by the gateway misconfig
-below (so it 500s and degrades to cosine until the gateway is fixed).
+`qwen-reranker`; **fail-soft** (any rerank error → cosine top-k). The gateway blocker
+was resolved by registering the reranker under the `hosted_vllm` provider (see below);
+the full two-stage chain (embed → cosine candidates → gateway `qwen-reranker` → top-k)
+is now **live-verified end-to-end**. Enable with `DBAGENT_EXAMPLE_RERANK=true` (+
+`DBAGENT_EXAMPLE_INDEX_PATH`).
 
 Still deferred (do not build until asked): `modeling_panel_data` (needs a
 permission-grain decision, see above), **LLM gateway retry/backoff** (nice-to-have now
@@ -166,8 +168,8 @@ that the 504 root cause is fixed — still worth adding for genuine transient bl
 and more stats tests (two-way ANOVA, post-hoc, Cox regression) — pure
 `sandbox/stats/registry.py` additions once asked.
 
-**`qwen-reranker` rerank — code BUILT, live BLOCKED on a gateway-side litellm bug
-(probed 2026-06-23).** Two layers were found:
+**`qwen-reranker` rerank — RESOLVED + live-verified (2026-06-23).** Two layers were
+found and fixed:
 1. *(FIXED)* the model was first registered under the `openai` provider → `/v1/rerank`
    500 `Unsupported provider: openai`. The user re-registered it under `infinity`
    (`model: infinity/qwen3-reranker-8b`, `mode: rerank`, api_base …:8002) — the
