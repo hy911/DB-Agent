@@ -149,8 +149,16 @@ examples never teach the model to write permission filters (those stay determini
 **Off until `Settings.example_index_path` is set** (default None → no-op retriever,
 zero extra calls); **fail-soft** (missing/corrupt index or embed failure → no
 examples, generation proceeds as before). Embedding seam is `llm/embedding.py`
-(`LiteLLMEmbeddingClient`), injected via `Deps.retrieve_examples`. `qwen-reranker`
-two-stage rerank is the deferred follow-up.
+(`LiteLLMEmbeddingClient`), injected via `Deps.retrieve_examples`.
+
+**Optional second-stage rerank built (2026-06-23, off by default, live-blocked).**
+`llm/rerank.py` (`LiteLLMRerankClient`) targets the standard rerank contract
+(`POST /v1/rerank {model,query,documents,top_n}` → `{results:[{index,relevance_score}]}`).
+When `Settings.example_rerank=True`, `make_retriever` fetches a larger cosine top-N
+(`example_rerank_candidates`, default 10) then reorders to `example_top_k` via
+`qwen-reranker`; **fail-soft** (any rerank error → cosine top-k). Built against the
+contract + fully offline-tested, but **live still blocked** by the gateway misconfig
+below (so it 500s and degrades to cosine until the gateway is fixed).
 
 Still deferred (do not build until asked): `modeling_panel_data` (needs a
 permission-grain decision, see above), **LLM gateway retry/backoff** (nice-to-have now
@@ -158,15 +166,15 @@ that the 504 root cause is fixed — still worth adding for genuine transient bl
 and more stats tests (two-way ANOVA, post-hoc, Cox regression) — pure
 `sandbox/stats/registry.py` additions once asked.
 
-**`qwen-reranker` two-stage rerank — BLOCKED on a gateway config fix (probed
+**`qwen-reranker` rerank — code BUILT, live BLOCKED on a gateway config fix (probed
 2026-06-22).** The model group `qwen-reranker` exists, but the gateway registers it
 under the **openai provider**, and LiteLLM's rerank route rejects that
 (`/v1/rerank` → 500 `Unsupported provider: openai`); it's also not a chat model
-(`/v1/chat/completions` → 404). To unblock: re-register `qwen-reranker` in the gateway
-config under a rerank-capable provider (infinity / jina / huggingface_rerank / custom)
-so `/v1/rerank` returns the standard `{results:[{index, relevance_score}]}`. Once that
-works, the rerank stage is a small add to `examples/retriever.py` (fetch a larger
-cosine top-N, rerank to top-k), off by default + fail-soft like the rest.
+(`/v1/chat/completions` → 404). The client + retriever integration is built and
+offline-tested (off by default, fail-soft); to make it actually rerank, re-register
+`qwen-reranker` in the gateway config under a rerank-capable provider (infinity / jina
+/ huggingface_rerank / custom) so `/v1/rerank` returns the standard
+`{results:[{index, relevance_score}]}`, then set `DBAGENT_EXAMPLE_RERANK=true`.
 
 ### Permission policy (Phase 1, confirmed with the user)
 
@@ -196,7 +204,8 @@ src/db_agent/
                    #   explain.py, mapping.py, result.py, gene_resolver.py
   llm/             # LiteLLM client + prompts + tasks (route / generate_sql /
                    #   answer / extract_genes / analyze_sql / request_stat /
-                   #   answer_stat); embedding.py (LiteLLMEmbeddingClient)
+                   #   answer_stat); embedding.py (LiteLLMEmbeddingClient);
+                   #   rerank.py (LiteLLMRerankClient, optional 2nd-stage rerank)
   examples/        # few-shot example retrieval: model.py (Example), store.py (local
                    #   .npz cosine index), build.py (offline builder + CLI),
                    #   retriever.py (request-time embed+search; off by default)

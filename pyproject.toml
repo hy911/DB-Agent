@@ -17,6 +17,7 @@ dependencies = [
     "scipy>=1.13",
     "lifelines>=0.29",
     "numpy>=1.26",
+    "httpx>=0.27",
 ]
 
 [project.optional-dependencies]

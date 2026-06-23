@@ -45,3 +45,74 @@ def test_make_retriever_fail_soft_on_embed_error():
 def test_default_retriever_no_index_is_noop():
     # no example_index_path -> the no-op retriever
     assert default_retriever(Settings(_env_file=None)) is _no_examples
+
+
+class _RecordingStore:
+    """Returns k distinct examples; records the n it was asked for."""
+
+    def __init__(self, n_available):
+        self._all = [Example(f"q{i}", f"SELECT {i}", "efficacy") for i in range(n_available)]
+        self.asked = None
+
+    def search(self, vec, domain, k):
+        self.asked = k
+        return self._all[:k]
+
+
+class _Rerank:
+    def __init__(self, order):
+        self._order = order
+        self.seen = None
+
+    def rerank(self, query, documents, top_n):
+        self.seen = (query, documents, top_n)
+        return self._order[:top_n]
+
+
+def test_rerank_reorders_candidates_to_top_k():
+    store = _RecordingStore(10)
+    rr = _Rerank(order=[2, 0, 1])  # reranker prefers candidate index 2, then 0
+    retrieve = make_retriever(store, _Embed(), k=2, rerank=rr, candidates=5)
+    out = retrieve("efficacy", "q")
+    assert store.asked == 5  # fetched the candidate pool, not just k
+    assert [e.question for e in out] == ["q2", "q0"]  # reranked order, truncated to k
+    assert rr.seen[2] == 2  # top_n passed to reranker == k
+
+
+def test_rerank_fail_soft_falls_back_to_cosine():
+    class _Boom:
+        def rerank(self, query, documents, top_n):
+            raise RuntimeError("rerank route 500")
+
+    store = _RecordingStore(10)
+    retrieve = make_retriever(store, _Embed(), k=2, rerank=_Boom(), candidates=5)
+    out = retrieve("efficacy", "q")
+    assert [e.question for e in out] == ["q0", "q1"]  # cosine order preserved
+
+
+def test_no_rerank_is_plain_cosine_top_k():
+    store = _RecordingStore(10)
+    retrieve = make_retriever(store, _Embed(), k=3)
+    out = retrieve("efficacy", "q")
+    assert store.asked == 3  # only k fetched when no rerank
+    assert [e.question for e in out] == ["q0", "q1", "q2"]
+
+
+def test_default_retriever_rerank_enabled_builds_client(monkeypatch, tmp_path):
+    # an index file must exist for default_retriever to build a real retriever
+    import numpy as np
+
+    from db_agent.examples.build import save_index
+
+    save_index(
+        tmp_path / "idx.npz",
+        np.array([[1.0, 0.0]], dtype=np.float32),
+        [Example("q", "SELECT 1", "efficacy")],
+    )
+    s = Settings(
+        _env_file=None,
+        example_index_path=tmp_path / "idx.npz",
+        example_rerank=True,
+    )
+    retrieve = default_retriever(s)
+    assert retrieve is not _no_examples  # a real retriever was built

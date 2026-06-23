@@ -64,10 +64,17 @@ class Settings(BaseSettings):
         default="qwen-embedding",
         validation_alias=AliasChoices("DBAGENT_MODEL_EMBED", "MODEL_EMBED"),
     )
+    model_rerank: str = Field(  # second-stage rerank for example retrieval
+        default="qwen-reranker",
+        validation_alias=AliasChoices("DBAGENT_MODEL_RERANK", "MODEL_RERANK"),
+    )
 
     # --- few-shot example retrieval (off until an index path is set) ---
     example_index_path: Path | None = None
     example_top_k: int = 3
+    # Optional second-stage rerank (off by default; needs a working gateway /v1/rerank).
+    example_rerank: bool = False
+    example_rerank_candidates: int = 10
     # Qwen3 models default to "thinking" mode and emit long reasoning before the
     # answer — for routing / SQL-gen / answer that just burns latency and makes the
     # gateway 504 on the upstream timeout. Disable it by default (these are

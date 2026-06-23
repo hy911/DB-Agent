@@ -375,6 +375,7 @@ source = { editable = "." }
 dependencies = [
     { name = "duckdb" },
     { name = "fastapi" },
+    { name = "httpx" },
     { name = "langgraph" },
     { name = "lifelines" },
     { name = "litellm" },
@@ -398,6 +399,7 @@ dev = [
 requires-dist = [
     { name = "duckdb", specifier = ">=1.0" },
     { name = "fastapi", specifier = ">=0.115" },
+    { name = "httpx", specifier = ">=0.27" },
     { name = "langgraph", specifier = ">=0.2" },
     { name = "lifelines", specifier = ">=0.29" },
     { name = "litellm", specifier = ">=1.50" },
