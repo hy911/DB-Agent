@@ -94,6 +94,11 @@ the subdir `CLAUDE.md` files — do not reproduce it here):
   `src/db_agent/examples/CLAUDE.md`** (incl. the reranker `hosted_vllm` gateway-config
   requirement).
 - **observability**: optional per-run JSONL (`DBAGENT_OBSERVABILITY_LOG_PATH`).
+- **frontend**: a self-contained chat UI at `GET /` (`src/db_agent/web/index.html`,
+  zero deps). Three status branches (answered/clarify/error); collapsible SQL +
+  result table; auto-charting (bar / single & grouped multi-series line, inferred
+  from columns). Preview offline via `.claude/launch.json` (`web-static`); end-to-end
+  needs the running app (`uv run uvicorn db_agent.api.app:app`).
 
 **LLM/gateway gotcha (important, cross-cutting):** Qwen3 models default to *thinking
 mode* (long reasoning before the answer → heavy prompts blow past the gateway timeout;
@@ -146,7 +151,9 @@ src/db_agent/
   graph/           # LangGraph: state.py (AgentState, Deps), nodes.py, build.py.
                    #   Flow: route → [extract→resolve] → assemble → retrieve_examples
                    #   → generate_sql → guard → execute → analyze → stats → answer
-  api/             # FastAPI: app.py (create_app, POST /query, GET /health)
+  api/             # FastAPI: app.py (create_app, POST /query, GET /health, GET /)
+  web/             # single-file chat UI (index.html, inline CSS+JS, zero deps);
+                   #   served at GET / via FileResponse; auto-charts numeric results
   observability/   # RunRecord + JsonlObserver (optional per-run logging)
 tests/             # offline default (no DB/LLM); tests/integration/ is -m integration
 ```
