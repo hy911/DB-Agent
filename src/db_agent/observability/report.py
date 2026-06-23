@@ -69,21 +69,13 @@ def _main(argv: list[str] | None = None) -> int:
     import argparse
 
     from db_agent.config import get_settings
-    from db_agent.db.audit import AuditLog
+    from db_agent.observability.source import read_records
 
-    parser = argparse.ArgumentParser(description="Analyze the agent audit log.")
+    parser = argparse.ArgumentParser(description="Analyze the agent run log.")
     parser.add_argument("--top-errors", type=int, default=5)
     args = parser.parse_args(argv)
 
-    settings = get_settings()
-    if settings.audit_db_dsn is None:
-        parser.error("DBAGENT_AUDIT_DB_DSN is not set; nothing to analyze")
-    audit = AuditLog(settings)
-    audit.open()
-    try:
-        rows = audit.fetch_records()
-    finally:
-        audit.close()
+    rows = read_records(get_settings())
     print(format_report(summarize(rows, top_errors=args.top_errors)))
     return 0
 

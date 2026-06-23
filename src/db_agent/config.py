@@ -32,6 +32,9 @@ class Settings(BaseSettings):
     # When set, per-run records are written to `audit_table` for SQL analysis.
     audit_db_dsn: str | None = None
     audit_table: str = "agent_query_log"
+    # Per-run we store the first N result rows (dev-stage: see what data came back,
+    # not just the rowcount). truncated/rowcount still reflect the full result.
+    audit_result_sample_rows: int = 50
 
     # --- read replica (restricted read-only role) ---
     replica_dsn: str = "postgresql://readonly@localhost:5432/tumordb"

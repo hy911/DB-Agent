@@ -1,7 +1,8 @@
 """The per-run record (CLAUDE.md item #8 tuple), built from the final state.
 
-Summary only: the result is reduced to rowcount/columns/truncated — raw rows are
-never captured.
+The result is reduced to rowcount/columns/truncated PLUS a capped sample of the
+first N rows (`result_sample`) so reviewers can see what data actually came back,
+not just how many rows. `truncated`/`rowcount` always reflect the full result.
 """
 
 from __future__ import annotations
@@ -37,6 +38,7 @@ class RunRecord:
     clarification: str | None
     error: str | None
     latency_ms: float | None = None
+    result_sample: list[dict[str, object]] | None = None
     feedback: str | None = None  # placeholder; reserved for future user feedback
 
     @classmethod
@@ -46,12 +48,14 @@ class RunRecord:
         *,
         run_id: str | None = None,
         latency_ms: float | None = None,
+        result_sample_rows: int = 50,
     ) -> RunRecord:
         result = state.get("result")
         if result is not None:
             rowcount, columns, truncated = result.rowcount, result.columns, result.truncated
+            result_sample = list(result.rows[:result_sample_rows]) if result_sample_rows else None
         else:
-            rowcount, columns, truncated = None, None, None
+            rowcount, columns, truncated, result_sample = None, None, None, None
         return cls(
             run_id=run_id or uuid.uuid4().hex,
             ts=datetime.now(UTC).isoformat(),
@@ -71,6 +75,7 @@ class RunRecord:
             clarification=state.get("clarification"),
             error=state.get("error"),
             latency_ms=latency_ms,
+            result_sample=result_sample,
         )
 
     def to_dict(self) -> dict:

@@ -12,6 +12,8 @@ parameters and the table name is composed via `psycopg.sql.Identifier`.
 
 from __future__ import annotations
 
+import functools
+import json
 from datetime import datetime
 from typing import TYPE_CHECKING
 
@@ -25,6 +27,11 @@ from db_agent.config import Settings
 if TYPE_CHECKING:
     # Type-only import keeps db/ free of a runtime dependency on observability.
     from db_agent.observability.record import RunRecord
+
+# default=str: sampled result rows may hold Decimal/datetime/date that json can't
+# encode natively — coerce to strings rather than fail the insert.
+_dumps = functools.partial(json.dumps, default=str)
+_JSONB_COLUMNS = frozenset({"columns", "result_sample"})
 
 # Column order is the single source of truth for both DDL and INSERT.
 _COLUMNS: tuple[str, ...] = (
@@ -46,6 +53,7 @@ _COLUMNS: tuple[str, ...] = (
     "clarification",
     "error",
     "latency_ms",
+    "result_sample",
     "feedback",
 )
 
@@ -68,6 +76,7 @@ _DDL = """CREATE TABLE IF NOT EXISTS {tbl} (
     clarification text,
     error text,
     latency_ms double precision,
+    result_sample jsonb,
     feedback text
 )"""
 
@@ -116,8 +125,8 @@ class AuditLog:
             v = d[col]
             if col == "ts" and v is not None:
                 v = datetime.fromisoformat(v)
-            elif col == "columns" and v is not None:
-                v = Jsonb(v)
+            elif col in _JSONB_COLUMNS and v is not None:
+                v = Jsonb(v, dumps=_dumps)
             values.append(v)
         stmt = sql.SQL("INSERT INTO {tbl} ({cols}) VALUES ({ph})").format(
             tbl=sql.Identifier(self._table),

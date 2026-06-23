@@ -90,7 +90,14 @@ def run_agent(
     latency_ms = (time.perf_counter() - start) * 1000.0
     if observer is not None:
         try:
-            observer(RunRecord.from_state(final, run_id=run_id, latency_ms=latency_ms))
+            observer(
+                RunRecord.from_state(
+                    final,
+                    run_id=run_id,
+                    latency_ms=latency_ms,
+                    result_sample_rows=settings.audit_result_sample_rows,
+                )
+            )
         except Exception:
             pass  # observability is best-effort; never break a good answer
     return to_result(final, run_id=run_id)

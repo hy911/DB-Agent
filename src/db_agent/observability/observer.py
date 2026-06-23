@@ -27,6 +27,9 @@ class JsonlObserver:
 
     def __call__(self, record: RunRecord) -> None:
         self._path.parent.mkdir(parents=True, exist_ok=True)
-        line = json.dumps(record.to_dict(), ensure_ascii=False)
+        # default=str: result_sample rows may hold Decimal/datetime/date from
+        # Postgres, which json can't encode natively — coerce them to strings
+        # rather than lose the whole record.
+        line = json.dumps(record.to_dict(), ensure_ascii=False, default=str)
         with self._path.open("a", encoding="utf-8") as f:
             f.write(line + "\n")

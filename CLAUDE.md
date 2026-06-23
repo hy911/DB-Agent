@@ -98,11 +98,17 @@ the subdir `CLAUDE.md` files — do not reproduce it here):
   (`api/app.py` `_select_observer`): writable Postgres audit table
   (`DBAGENT_AUDIT_DB_DSN` → `db/audit.py` `AuditLog`, **separate writable role, never
   the read replica**) > explicit JSONL (`DBAGENT_OBSERVABILITY_LOG_PATH`) > default
-  local JSONL (`logs/agent_runs.jsonl`). Result rows are never stored — only the
-  `RunRecord` summary (rowcount/columns/truncated); `answer` text is kept. Analyze with
-  `python -m db_agent.observability.report` (status mix / failure rate / retry dist /
-  top errors / per-domain / latency p50-p95). `RunRecord.feedback` column is reserved
-  (no UI feedback loop yet).
+  local JSONL (`logs/agent_runs.jsonl`). Each run stores the full `RunRecord`
+  including `answer` text and a **capped sample of result rows** (`result_sample`,
+  first `audit_result_sample_rows`=50; rowcount/truncated still reflect the full
+  result) — dev-stage choice so reviewers see the actual data, not just counts.
+  JSONL/Jsonb serialize with `default=str` (result rows may carry Decimal/datetime).
+  Read it back via `observability/source.py` `read_records` (same precedence as the
+  writer): `python -m db_agent.observability.report` (status mix / failure rate /
+  retry dist / top errors / per-domain / latency p50-p95) and
+  `python -m db_agent.observability.review --last N` (readable Q→SQL→result→answer
+  stream, for eyeballing or feeding the log to an assistant to iterate). The
+  `RunRecord.feedback` column is reserved (no UI feedback loop yet).
 - **frontend**: a self-contained chat UI at `GET /` (`src/db_agent/web/index.html`,
   zero deps). Three status branches (answered/clarify/error); collapsible SQL +
   result table; auto-charting (bar / single & grouped multi-series line, inferred
@@ -164,7 +170,8 @@ src/db_agent/
   api/             # FastAPI: app.py (create_app, POST /query, GET /health, GET /)
   web/             # single-file chat UI (index.html, inline CSS+JS, zero deps);
                    #   served at GET / via FileResponse; auto-charts numeric results
-  observability/   # RunRecord + sinks (Jsonl/Postgres/Null) + report.py analysis CLI
+  observability/   # RunRecord (+result_sample) + sinks (Jsonl/Postgres/Null) +
+                   #   source.read_records + report.py / review.py analysis CLIs
 tests/             # offline default (no DB/LLM); tests/integration/ is -m integration
 ```
 
