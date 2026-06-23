@@ -87,11 +87,16 @@ class AuditLog:
             raise ValueError("AuditLog requires Settings.audit_db_dsn")
         self._table = settings.audit_table
         # autocommit: each run is a single best-effort INSERT, no transaction needed.
+        # Short timeouts so a slow/unreachable LOG db never stalls a real query:
+        # connect_timeout bounds the TCP connect (libpq default is infinite); the
+        # pool `timeout` bounds waiting for a free connection. Logging is best-effort
+        # (run_agent swallows failures), so failing fast here is the right trade.
         self.pool = ConnectionPool(
             conninfo=settings.audit_db_dsn,
             min_size=1,
             max_size=settings.pool_max_size,
-            kwargs={"autocommit": True},
+            kwargs={"autocommit": True, "connect_timeout": 5},
+            timeout=5.0,
             open=False,
         )
 

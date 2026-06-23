@@ -116,7 +116,7 @@ def test_query_llm_exception_is_502():
     with _client(_RaisingLLM(), _Replica([])) as client:
         resp = client.post("/query", json={"question": "boom"})
     assert resp.status_code == 502
-    assert resp.json()["detail"] == "agent backend error"
+    assert resp.json()["detail"].startswith("agent backend error")
 
 
 def test_query_missing_question_is_422():

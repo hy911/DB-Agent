@@ -22,6 +22,7 @@ class LiteLLMClient:
     def __init__(self, settings: Settings) -> None:
         self._base_url = settings.litellm_base_url
         self._api_key = settings.litellm_api_key
+        self._timeout = settings.llm_timeout_s
         # Qwen3 thinking mode is toggled via the chat template; on a vLLM
         # OpenAI-compatible gateway it rides in extra_body. Off by default so the
         # model emits the answer directly instead of long reasoning (which otherwise
@@ -39,5 +40,6 @@ class LiteLLMClient:
             api_key=self._api_key,
             messages=messages,
             extra_body=self._extra_body,
+            timeout=self._timeout,
         )
         return resp.choices[0].message.content or ""

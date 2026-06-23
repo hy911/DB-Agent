@@ -9,6 +9,7 @@ field); an exception out of run_agent is 502.
 
 from __future__ import annotations
 
+import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -26,6 +27,8 @@ from db_agent.llm import LiteLLMClient
 from db_agent.observability.observer import JsonlObserver, NullObserver, Observer
 from db_agent.observability.postgres import PostgresObserver
 from db_agent.semantic import load_semantic_layer
+
+logger = logging.getLogger("db_agent.api")
 
 router = APIRouter()
 
@@ -55,8 +58,13 @@ def query(req: QueryRequest, request: Request) -> QueryResponse:
             settings=deps.settings,
             observer=request.app.state.observer,
         )
-    except Exception as exc:  # infrastructure failure (gateway down, pool timeout)
-        raise HTTPException(status_code=502, detail="agent backend error") from exc
+    except Exception as exc:  # infrastructure failure (gateway down/timeout, pool timeout)
+        # Log the full traceback server-side, and surface the cause in the response
+        # so a pending->502 can be diagnosed (dev stage, internal). The real culprit
+        # is usually an LLM gateway timeout.
+        logger.exception("run_agent failed (question=%r)", req.question)
+        detail = f"agent backend error: {type(exc).__name__}: {exc}"
+        raise HTTPException(status_code=502, detail=detail) from exc
     return _to_response(result)
 
 
@@ -87,9 +95,14 @@ def _select_observer(s: Settings) -> tuple[Observer, AuditLog | None]:
     is lost before the audit DB exists. Returns the AuditLog to close on shutdown.
     """
     if s.audit_db_dsn is not None:
-        audit = AuditLog(s)
-        audit.open()
-        return PostgresObserver(audit), audit
+        try:
+            audit = AuditLog(s)
+            audit.open()  # connect + ensure_schema; bounded by connect_timeout
+            return PostgresObserver(audit), audit
+        except Exception:
+            # A down/misconfigured log DB must never block startup — fall back to
+            # the file sink so queries still serve (and still get logged).
+            logger.exception("audit DB unavailable; falling back to JSONL sink")
     path = s.observability_log_path or s.default_log_path
     return JsonlObserver(path), None
 
