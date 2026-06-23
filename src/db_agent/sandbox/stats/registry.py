@@ -2,7 +2,13 @@
 
 from __future__ import annotations
 
-from db_agent.sandbox.stats.functions import kaplan_meier, one_way_anova, welch_t_test
+from db_agent.sandbox.stats.functions import (
+    kaplan_meier,
+    mann_whitney_u,
+    one_way_anova,
+    tukey_hsd,
+    welch_t_test,
+)
 from db_agent.sandbox.stats.spec import ParamSpec, StatTest
 
 REGISTRY: dict[str, StatTest] = {
@@ -40,6 +46,27 @@ REGISTRY: dict[str, StatTest] = {
                 "group": ParamSpec("column", required=False),
             },
             kaplan_meier,
+        ),
+        StatTest(
+            "mann_whitney_u",
+            "Non-parametric comparison of a numeric value between exactly two groups "
+            "(Mann-Whitney U); use when normality is doubtful.",
+            {
+                "value": ParamSpec("column"),
+                "group": ParamSpec("column"),
+                "alpha": ParamSpec("scalar", required=False, py_type=float, bounds=(0.0, 1.0)),
+            },
+            mann_whitney_u,
+        ),
+        StatTest(
+            "tukey_hsd",
+            "Tukey HSD post-hoc pairwise comparison of a numeric value across groups, "
+            "run after a significant one-way ANOVA.",
+            {
+                "value": ParamSpec("column"),
+                "group": ParamSpec("column"),
+            },
+            tukey_hsd,
         ),
     )
 }

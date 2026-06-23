@@ -74,3 +74,47 @@ def test_kaplan_meier_rejects_bad_event_code():
     rows = [{"t": 1.0, "e": 2}, {"t": 2.0, "e": 0}]
     with pytest.raises(GuardError):
         kaplan_meier(rows, {"duration": "t", "event": "e"})
+
+
+def test_mann_whitney_detects_shift():
+    from db_agent.sandbox.stats.functions import mann_whitney_u
+
+    rows = [{"g": "a", "v": x} for x in (1.0, 2.0, 3.0, 4.0)] + [
+        {"g": "b", "v": x} for x in (10.0, 11.0, 12.0, 13.0)
+    ]
+    out = mann_whitney_u(rows, {"value": "v", "group": "g"})
+    assert out.test == "mann_whitney_u"
+    assert out.stats["p_value"] < 0.05
+    assert {g["label"] for g in out.groups} == {"a", "b"}
+    assert all("median" in g for g in out.groups)
+
+
+def test_mann_whitney_requires_two_groups():
+    from db_agent.sandbox.stats.functions import mann_whitney_u
+
+    rows = [{"g": "a", "v": 1.0}, {"g": "a", "v": 2.0}]
+    with pytest.raises(GuardError):
+        mann_whitney_u(rows, {"value": "v", "group": "g"})
+
+
+def test_tukey_pairwise_keys_and_best_pair():
+    from db_agent.sandbox.stats.functions import tukey_hsd
+
+    rows = (
+        [{"g": "a", "v": x} for x in (1.0, 2.0, 3.0)]
+        + [{"g": "b", "v": x} for x in (1.5, 2.5, 3.5)]
+        + [{"g": "c", "v": x} for x in (50.0, 51.0, 52.0)]
+    )
+    out = tukey_hsd(rows, {"value": "v", "group": "g"})
+    assert out.test == "tukey_hsd"
+    assert "a vs b p" in out.stats and "a vs c p" in out.stats and "b vs c p" in out.stats
+    # a vs c is far apart -> smaller p than a vs b
+    assert out.stats["a vs c p"] < out.stats["a vs b p"]
+
+
+def test_tukey_needs_two_groups():
+    from db_agent.sandbox.stats.functions import tukey_hsd
+
+    rows = [{"g": "a", "v": 1.0}, {"g": "a", "v": 2.0}]
+    with pytest.raises(GuardError):
+        tukey_hsd(rows, {"value": "v", "group": "g"})

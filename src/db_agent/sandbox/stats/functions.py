@@ -5,7 +5,7 @@ this module (e.g. via the registry at graph build time) stays cheap and offline.
 from __future__ import annotations
 
 import math
-from statistics import fmean
+from statistics import fmean, median
 
 from db_agent.sandbox.stats.spec import StatResult
 from db_agent.sql.errors import GuardError
@@ -169,3 +169,73 @@ def kaplan_meier(rows, params) -> StatResult:
             "Log-rank test is reported only for exactly 2 groups; medians shown for all."
         )
     return StatResult(test="kaplan_meier", stats=stats, groups=out_groups, caveats=caveats)
+
+
+def mann_whitney_u(rows, params) -> StatResult:
+    from scipy import stats as _stats
+
+    groups = _group_values(rows, params["value"], params["group"])
+    if len(groups) != 2:
+        raise GuardError(
+            "stat_group_count",
+            f"Mann-Whitney needs exactly 2 groups, got {len(groups)}",
+            retryable=False,
+        )
+    (l1, v1), (l2, v2) = sorted(groups.items())
+    if len(v1) < 2 or len(v2) < 2:
+        raise GuardError(
+            "stat_insufficient_n", "each group needs at least 2 values", retryable=False
+        )
+    alpha = float(params.get("alpha", 0.05))
+    u, p = _stats.mannwhitneyu(v1, v2, alternative="two-sided")
+    caveats = [
+        "Mann-Whitney U (non-parametric); makes no normality assumption.",
+        "Tests whether one group's values are stochastically shifted vs the other.",
+        _significance(float(p), alpha),
+    ]
+    return StatResult(
+        test="mann_whitney_u",
+        stats={"u": float(u), "p_value": float(p)},
+        groups=[
+            {"label": l1, "n": len(v1), "median": median(v1)},
+            {"label": l2, "n": len(v2), "median": median(v2)},
+        ],
+        caveats=caveats,
+    )
+
+
+def tukey_hsd(rows, params) -> StatResult:
+    from scipy import stats as _stats
+
+    groups = _group_values(rows, params["value"], params["group"])
+    if len(groups) < 2:
+        raise GuardError(
+            "stat_group_count", f"Tukey needs at least 2 groups, got {len(groups)}", retryable=False
+        )
+    if len(groups) > _MAX_GROUPS:
+        raise GuardError(
+            "stat_group_count", f"too many groups ({len(groups)} > {_MAX_GROUPS})", retryable=False
+        )
+    for label, vals in groups.items():
+        if len(vals) < 2:
+            raise GuardError(
+                "stat_insufficient_n", f"group {label!r} needs at least 2 values", retryable=False
+            )
+    labels = sorted(groups)
+    res = _stats.tukey_hsd(*[groups[lbl] for lbl in labels])
+    stats: dict[str, float] = {}
+    for i in range(len(labels)):
+        for j in range(i + 1, len(labels)):
+            stats[f"{labels[i]} vs {labels[j]} p"] = float(res.pvalue[i, j])
+    caveats = [
+        "Tukey HSD post-hoc pairwise comparison; family-wise error rate controlled.",
+        "Intended after a significant one-way ANOVA.",
+    ]
+    return StatResult(
+        test="tukey_hsd",
+        stats=stats,
+        groups=[
+            {"label": lbl, "n": len(groups[lbl]), "mean": fmean(groups[lbl])} for lbl in labels
+        ],
+        caveats=caveats,
+    )
