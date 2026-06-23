@@ -179,17 +179,20 @@ and more stats tests (two-way ANOVA, post-hoc, Cox regression) — pure
    string. `return_documents:false` does NOT help (validation is on the gateway's
    response model). This is a litellm-version vs infinity-response-shape mismatch,
    purely gateway-side — our client is correct against the standard contract.
-   **Chosen fix (user, 2026-06-23): upgrade litellm on the gateway** (newer versions
-   handle the infinity document object) — keeps rerank behind the central gateway, no
-   code change needed; once `/v1/rerank` returns clean `{results:[{index,
-   relevance_score}]}`, set `DBAGENT_EXAMPLE_RERANK=true`.
-   *Verified fallback (not adopted):* a **direct** call to the infinity endpoint
-   (`http://172.16.113.1:8002/v1/rerank`, model `qwen3-reranker-8b`) returns 200 with
-   clean `results:[{index, relevance_score, document:{text,…}}]` — our client reads
-   only `index`+`relevance_score` so it would work as-is; adopting it would just need a
-   small `rerank_base_url` setting to bypass the gateway for rerank. Reference:
+   **FIX FOUND + locally verified (2026-06-23): use the `hosted_vllm` provider, not
+   `infinity`.** The model is vLLM-served, and litellm's `infinity` rerank transform
+   mishandles vLLM/infinity's object-form `document` (`{text, multi_modal}`), assigning
+   the whole object to `RerankResponse.document.text` (expects str). `return_documents`
+   does NOT help — infinity ignores it and always echoes documents. litellm's
+   `hosted_vllm` rerank transform parses the same response cleanly (verified locally
+   with `litellm.rerank(model="hosted_vllm/qwen3-reranker-8b", api_base=…:8002/v1,
+   api_key="EMPTY")` → clean `index`+`relevance_score`, with or without the `/v1`
+   suffix). **Gateway config change (no code change on our side):** in the
+   `qwen-reranker` entry set `model: hosted_vllm/qwen3-reranker-8b` (was
+   `infinity/qwen3-reranker-8b`), keep `mode: rerank`, reload the gateway. Then set
+   `DBAGENT_EXAMPLE_RERANK=true` (+ `DBAGENT_EXAMPLE_INDEX_PATH`) to go live. Reference:
    vLLM serves Qwen3-Reranker via `/v1/rerank` with `--hf_overrides` architecture
-   `Qwen3ForSequenceClassification` (document is an object `{text}` by design).
+   `Qwen3ForSequenceClassification`; document is an object `{text}` by design.
 
 ### Permission policy (Phase 1, confirmed with the user)
 
