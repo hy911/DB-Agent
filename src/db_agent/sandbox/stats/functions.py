@@ -241,6 +241,105 @@ def tukey_hsd(rows, params) -> StatResult:
     )
 
 
+def _paired_values(rows, x_col: str, y_col: str) -> tuple[list[float], list[float]]:
+    xs: list[float] = []
+    ys: list[float] = []
+    for r in rows:
+        xv, yv = r.get(x_col), r.get(y_col)
+        if xv is None or yv is None:
+            continue
+        fx, fy = _to_float(x_col, xv), _to_float(y_col, yv)
+        if math.isnan(fx) or math.isnan(fy):
+            continue
+        xs.append(fx)
+        ys.append(fy)
+    return xs, ys
+
+
+def _column_values(rows, col: str) -> list[float]:
+    out: list[float] = []
+    for r in rows:
+        v = r.get(col)
+        if v is None:
+            continue
+        f = _to_float(col, v)
+        if math.isnan(f):
+            continue
+        out.append(f)
+    return out
+
+
+def kruskal_wallis(rows, params) -> StatResult:
+    from scipy import stats as _stats
+
+    groups = _group_values(rows, params["value"], params["group"])
+    if len(groups) < 2:
+        raise GuardError(
+            "stat_group_count",
+            f"Kruskal-Wallis needs at least 2 groups, got {len(groups)}",
+            retryable=False,
+        )
+    for label, vals in groups.items():
+        if len(vals) < 2:
+            raise GuardError(
+                "stat_insufficient_n", f"group {label!r} needs at least 2 values", retryable=False
+            )
+    h, p = _stats.kruskal(*groups.values())
+    caveats = [
+        "Kruskal-Wallis (non-parametric one-way ANOVA); rank-based, no normality assumption.",
+        _significance(float(p), 0.05),
+    ]
+    return StatResult(
+        test="kruskal_wallis",
+        stats={"h": float(h), "p_value": float(p)},
+        groups=[
+            {"label": lbl, "n": len(groups[lbl]), "median": median(groups[lbl])}
+            for lbl in sorted(groups)
+        ],
+        caveats=caveats,
+    )
+
+
+def spearman_correlation(rows, params) -> StatResult:
+    from scipy import stats as _stats
+
+    xs, ys = _paired_values(rows, params["x"], params["y"])
+    if len(xs) < 3:
+        raise GuardError("stat_insufficient_n", "need at least 3 paired points", retryable=False)
+    res = _stats.spearmanr(xs, ys)
+    p = float(res.pvalue)
+    caveats = [
+        "Spearman rank correlation (monotonic association).",
+        _significance(p, 0.05),
+    ]
+    return StatResult(
+        test="spearman_correlation",
+        stats={"rho": float(res.statistic), "p_value": p, "n": float(len(xs))},
+        groups=[],
+        caveats=caveats,
+    )
+
+
+def pearson_correlation(rows, params) -> StatResult:
+    from scipy import stats as _stats
+
+    xs, ys = _paired_values(rows, params["x"], params["y"])
+    if len(xs) < 3:
+        raise GuardError("stat_insufficient_n", "need at least 3 paired points", retryable=False)
+    res = _stats.pearsonr(xs, ys)
+    p = float(res.pvalue)
+    caveats = [
+        "Pearson linear correlation; sensitive to outliers; assumes roughly bivariate-normal.",
+        _significance(p, 0.05),
+    ]
+    return StatResult(
+        test="pearson_correlation",
+        stats={"r": float(res.statistic), "p_value": p, "n": float(len(xs))},
+        groups=[],
+        caveats=caveats,
+    )
+
+
 def two_way_anova(rows, params) -> StatResult:
     import pandas as pd
     import statsmodels.formula.api as smf

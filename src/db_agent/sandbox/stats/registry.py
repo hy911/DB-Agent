@@ -5,8 +5,11 @@ from __future__ import annotations
 from db_agent.sandbox.stats.functions import (
     cox_ph,
     kaplan_meier,
+    kruskal_wallis,
     mann_whitney_u,
     one_way_anova,
+    pearson_correlation,
+    spearman_correlation,
     tukey_hsd,
     two_way_anova,
     welch_t_test,
@@ -92,6 +95,25 @@ REGISTRY: dict[str, StatTest] = {
                 "covariates": ParamSpec("columns"),
             },
             cox_ph,
+        ),
+        StatTest(
+            "kruskal_wallis",
+            "Non-parametric one-way ANOVA: compare a numeric value across two or more "
+            "groups (Kruskal-Wallis); use when normality is doubtful.",
+            {"value": ParamSpec("column"), "group": ParamSpec("column")},
+            kruskal_wallis,
+        ),
+        StatTest(
+            "spearman_correlation",
+            "Spearman rank correlation (monotonic association) between two numeric columns.",
+            {"x": ParamSpec("column"), "y": ParamSpec("column")},
+            spearman_correlation,
+        ),
+        StatTest(
+            "pearson_correlation",
+            "Pearson linear correlation between two numeric columns.",
+            {"x": ParamSpec("column"), "y": ParamSpec("column")},
+            pearson_correlation,
         ),
     )
 }

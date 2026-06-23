@@ -165,7 +165,60 @@ def test_cox_ph_insufficient_events():
         cox_ph(rows, {"duration": "t", "event": "e", "covariates": ["dose"]})
 
 
-def test_registry_lists_all_seven_tests():
+def test_kruskal_detects_difference():
+    from db_agent.sandbox.stats.functions import kruskal_wallis
+
+    rows = (
+        [{"g": "a", "v": x} for x in (1.0, 2.0, 3.0)]
+        + [{"g": "b", "v": x} for x in (4.0, 5.0, 6.0)]
+        + [{"g": "c", "v": x} for x in (40.0, 50.0, 60.0)]
+    )
+    out = kruskal_wallis(rows, {"value": "v", "group": "g"})
+    assert out.test == "kruskal_wallis"
+    assert out.stats["p_value"] < 0.05
+    assert len(out.groups) == 3 and all("median" in g for g in out.groups)
+
+
+def test_kruskal_needs_two_groups():
+    from db_agent.sandbox.stats.functions import kruskal_wallis
+
+    rows = [{"g": "a", "v": 1.0}, {"g": "a", "v": 2.0}]
+    with pytest.raises(GuardError):
+        kruskal_wallis(rows, {"value": "v", "group": "g"})
+
+
+def test_spearman_monotonic():
+    from db_agent.sandbox.stats.functions import spearman_correlation
+
+    rows = [{"x": float(i), "y": float(i * i)} for i in range(1, 8)]  # monotonic
+    out = spearman_correlation(rows, {"x": "x", "y": "y"})
+    assert out.test == "spearman_correlation"
+    assert out.stats["rho"] > 0.99
+    assert out.stats["p_value"] < 0.05
+    assert out.stats["n"] == 7.0
+
+
+def test_pearson_linear():
+    from db_agent.sandbox.stats.functions import pearson_correlation
+
+    rows = [{"x": float(i), "y": 2.0 * i + 1.0} for i in range(1, 8)]  # perfectly linear
+    out = pearson_correlation(rows, {"x": "x", "y": "y"})
+    assert out.test == "pearson_correlation"
+    assert out.stats["r"] > 0.99
+    assert out.stats["n"] == 7.0
+
+
+def test_correlation_needs_three_points():
+    from db_agent.sandbox.stats.functions import pearson_correlation, spearman_correlation
+
+    rows = [{"x": 1.0, "y": 2.0}, {"x": 2.0, "y": 4.0}]
+    with pytest.raises(GuardError):
+        spearman_correlation(rows, {"x": "x", "y": "y"})
+    with pytest.raises(GuardError):
+        pearson_correlation(rows, {"x": "x", "y": "y"})
+
+
+def test_registry_lists_all_tests():
     from db_agent.sandbox.stats.registry import REGISTRY, catalog_text
 
     assert set(REGISTRY) == {
@@ -176,6 +229,9 @@ def test_registry_lists_all_seven_tests():
         "tukey_hsd",
         "two_way_anova",
         "cox_ph",
+        "kruskal_wallis",
+        "spearman_correlation",
+        "pearson_correlation",
     }
     cat = catalog_text()
     assert "cox_ph" in cat
