@@ -70,138 +70,41 @@ domain route / clarify → context assembly (yaml) → SQL gen (qwen-code)
   → self-correct (≤3) → DuckDB analyze → vetted stats → NL answer + SQL (POST /query)
 ```
 
-Done:
+Current capabilities (history/forensics live in git + `docs/superpowers/specs/` and
+the subdir `CLAUDE.md` files — do not reproduce it here):
+
 - **All layers built**: semantic / sql / db / llm / graph / api / observability.
-- **Multi-domain routing is data-driven** (`SemanticLayer.routable_domains()`):
-  routes all four domains `{efficacy, expression, mutation, modeling}`.
-- **expression** domain (gene expression; NOT access-controlled → no permission
-  injection; the big-table EXPLAIN gate applies to `model_ccle_expression_data`).
-- **mutation** domain (somatic mutations; NOT access-controlled; added
-  2026-06-18, live-verified). `model_ccle_mutation_data` (big table, ~5.5M rows,
-  gene-bearing) + `oncokb` clinical annotation (domain=mutation → fed only for
-  mutation questions). Added as a **pure `semantic_layer.yaml` change** (zero
-  source changes) — proof the data-driven extension path works.
-- **modeling** domain (PDX/CDX 建模 characterization; **access-controlled**; added
-  2026-06-18, live-verified + SQL-security-reviewed). Hub `modeling_attr_info`
-  (`for_bd='yes'`) + **8 detail tables** (tumor_volume / body_weight / survival,
-  then facs / avg_radiance / total_flux / elisa / pathology added 2026-06-18 batch
-  2) filtered by `EXISTS` semi-join on `(model_uuid, model_no, group_id)`. Added as
-  a **pure `semantic_layer.yaml` change** (zero source changes) — the **first
-  access-controlled domain added via config**, exercising the real permission-
-  injection path (not the no-op). `modeling_panel_data` (added 2026-06-23) is the
-  **9th detail table**: model-level (no `group_id`), filtered by a **2-key**
-  `(model_uuid, model_no)` EXISTS at the **any-visible grain** (visible if any group of
-  the model is `for_bd='yes'`) — an explicit user grain decision; pure YAML, proving
-  the injector is key-count generic. SQL-security-reviewed SOUND.
-- **resolve_gene** tool (`db/gene_resolver.py`): deterministic gene-name →
-  canonical symbol (case-sensitive exact + pg_trgm fuzzy as clarify-only
-  candidates).
-- **observability**: optional per-run JSONL log (`DBAGENT_OBSERVABILITY_LOG_PATH`).
-- **DuckDB result-post-processing sandbox** (Phase 1; added 2026-06-18,
-  live-verified + SQL-security-reviewed). `sandbox/` is the only DuckDB boundary;
-  the graph runs `execute → analyze → answer`, where `analyze` lets the LLM
-  optionally emit ONE DuckDB `SELECT` over the result set (table `result`) for
-  descriptive stats / reshaping / correlations. **Locked down**: in-memory +
-  `enable_external_access=false` + a sqlglot SELECT-only validator (only `result`,
-  no file/network/attach funcs incl. the dedicated `read_csv`/`read_parquet`
-  nodes) + the sandbox only ever sees already-permission-filtered rows + **fail-
-  soft** (any GuardError → degrade to the raw-result answer). Injected via
-  `Deps.run_sandbox`.
-- **stats sandbox Phase 2** (real statistical inference; added 2026-06-22,
-  offline-complete + SQL-security-reviewed SOUND; live e2e blocked only by the
-  known gateway 504 gap). New pure subpackage `sandbox/stats/` (spec / validator /
-  registry / functions / runner). A new `stats` node runs AFTER `analyze`:
-  `execute → analyze (DuckDB reshape) → stats (vetted test) → answer`. The LLM
-  emits ONLY a structured `{function, params}` JSON request (data, never code);
-  `validate_stat_request` checks it against the frozen `REGISTRY` allowlist + the
-  current table's columns + scalar bounds, then a hand-written impl calls
-  scipy/statsmodels/lifelines. **Thirteen vetted tests** (named test + caveats, no
-  auto-switching): **Welch t-test**, **Mann-Whitney U**, **one-way ANOVA**,
-  **Kruskal-Wallis** (non-parametric ANOVA), **Tukey HSD** (post-hoc pairwise),
-  **two-way ANOVA** (statsmodels), **Kaplan-Meier + log-rank**, **Cox PH regression**
-  (covariates via the `columns` list param role), **Spearman** / **Pearson**
-  correlation, **Wilcoxon** signed-rank (paired), **Shapiro-Wilk** normality, and
-  **chi-square** independence. Dispatch is only ever through the registry dict (no
-  dynamic import); pure in-memory compute
-  (no file/network/DB); **fail-soft** (any GuardError → degrade to the descriptive
-  answer); independent row cap + typeless-scalar reject as defense in depth. Reads
-  the post-DuckDB table if present, else the raw result. Injected via `Deps.run_stat`.
+- **4 routable domains**, data-driven via `routable_domains()`: `efficacy` + `modeling`
+  (access-controlled) and `expression` + `mutation` (not). New domains/tables are pure
+  `semantic_layer.yaml` additions — **zero source changes** (proven repeatedly).
+  `expression`/`mutation` are gene-bearing big tables (EXPLAIN gate on
+  `model_ccle_expression_data` ~36M and `model_ccle_mutation_data` ~5.5M).
+- **modeling** (access-controlled): hub `modeling_attr_info` (`for_bd='yes'`) + 9 detail
+  tables filtered by correlated **`EXISTS`** semi-join. Most join on
+  `(model_uuid, model_no, group_id)`; `modeling_panel_data` is model-level → **2-key**
+  `(model_uuid, model_no)` "any-visible" grain (the injector is key-count generic).
+- **resolve_gene** wired into gene-bearing domains: `route → extract_genes →
+  resolve_genes → clarify | assemble`; deterministic (case-sensitive exact + pg_trgm
+  fuzzy as clarify-only), injected via `Deps.resolve_gene`, offline-testable.
+- **DuckDB post-processing sandbox** (`analyze` node, the only DuckDB boundary) — see
+  the `sandbox/` Gotchas + `Deps.run_sandbox`.
+- **stats inference** — 13 vetted tests via the `stats` node. **See
+  `src/db_agent/sandbox/stats/CLAUDE.md`.**
+- **few-shot example retrieval + optional two-stage rerank** (off by default). **See
+  `src/db_agent/examples/CLAUDE.md`** (incl. the reranker `hosted_vllm` gateway-config
+  requirement).
+- **observability**: optional per-run JSONL (`DBAGENT_OBSERVABILITY_LOG_PATH`).
 
-`resolve_gene` is now **wired into the question flow** (Plan B, executed
-2026-06-18, live-verified): a gene-bearing domain (`is_gene_bearing`) routes
-`route → extract_genes (LLM lists mentions) → resolve_genes (deterministic) →
-clarify | assemble_context`. All-resolved injects a canonical-symbol map into the
-sql-gen context; any ambiguous/unknown short-circuits to clarify. The resolver is
-injected via `Deps.resolve_gene` (default = real `db.resolve_gene`) so the graph
-stays offline-testable. Design specs + plans live under `docs/superpowers/`.
+**LLM/gateway gotcha (important, cross-cutting):** Qwen3 models default to *thinking
+mode* (long reasoning before the answer → heavy prompts blow past the gateway timeout;
+this was the chronic "504" root cause). `LiteLLMClient` sends
+`extra_body={"chat_template_kwargs": {"enable_thinking": False}}` (toggle
+`Settings.llm_enable_thinking`, default False) — request `extra_body` overrides the
+gateway's per-model config. The gateway also has `num_retries: 2`.
 
-**Gateway 504 root cause FOUND + FIXED (2026-06-22):** the chronic "transient" 504s
-were NOT a flaky gateway — the Qwen3 models default to **thinking mode**, emitting
-long reasoning before the answer, which on heavier prompts (SQL-gen) blows past the
-gateway's upstream timeout. `LiteLLMClient` now sends
-`extra_body={"chat_template_kwargs": {"enable_thinking": False}}` (toggle via
-`Settings.llm_enable_thinking`, default False). qwen-code SQL-gen dropped from
-504-timeout to ~2.6s; **full stats Phase 2 chain live-verified end-to-end** (Welch
-t-test fired through the stats node: t=-19.84, p=1.75e-53, per-group n/means + normality
-caveat, on for_bd-filtered rows).
-
-**Few-shot example retrieval built (2026-06-22, off by default).** New `examples/`
-package: an offline CLI (`python -m db_agent.examples.build <obs.jsonl> <out.npz>`)
-ingests the observability log, keeps `status=="answered"` runs, dedups, embeds each
-`question` via `qwen-embedding`, and writes a local `.npz` vector index (NOT in the
-read-only replica). A new `retrieve_examples` node (`assemble_context →
-retrieve_examples → generate_sql`) embeds the incoming question, does cosine top-k
-over the **same-domain** examples, and injects the `(question → raw_sql)` pairs into
-`sql_messages` as few-shot reference. **Uses `raw_sql`, never the secured SQL** — so
-examples never teach the model to write permission filters (those stay deterministic).
-**Off until `Settings.example_index_path` is set** (default None → no-op retriever,
-zero extra calls); **fail-soft** (missing/corrupt index or embed failure → no
-examples, generation proceeds as before). Embedding seam is `llm/embedding.py`
-(`LiteLLMEmbeddingClient`), injected via `Deps.retrieve_examples`.
-
-**Optional second-stage rerank built + LIVE-VERIFIED (2026-06-23, off by default).**
-`llm/rerank.py` (`LiteLLMRerankClient`) targets the standard rerank contract
-(`POST /v1/rerank {model,query,documents,top_n}` → `{results:[{index,relevance_score}]}`).
-When `Settings.example_rerank=True`, `make_retriever` fetches a larger cosine top-N
-(`example_rerank_candidates`, default 10) then reorders to `example_top_k` via
-`qwen-reranker`; **fail-soft** (any rerank error → cosine top-k). The gateway blocker
-was resolved by registering the reranker under the `hosted_vllm` provider (see below);
-the full two-stage chain (embed → cosine candidates → gateway `qwen-reranker` → top-k)
-is now **live-verified end-to-end**. Enable with `DBAGENT_EXAMPLE_RERANK=true` (+
-`DBAGENT_EXAMPLE_INDEX_PATH`).
-
-Still deferred (do not build until asked): **LLM gateway retry/backoff** (largely
-covered now — the gateway config has `num_retries: 2`; client-side backoff is still a
-possible nice-to-have), and yet more stats tests (Fisher exact, Levene,
+Still deferred (do not build until asked): **LLM gateway client-side retry/backoff**
+(gateway already has `num_retries: 2`), and more stats tests (Fisher exact, Levene,
 mixed/repeated-measures) — pure `sandbox/stats/registry.py` additions once asked.
-
-**`qwen-reranker` rerank — RESOLVED + live-verified (2026-06-23).** Two layers were
-found and fixed:
-1. *(FIXED)* the model was first registered under the `openai` provider → `/v1/rerank`
-   500 `Unsupported provider: openai`. The user re-registered it under `infinity`
-   (`model: infinity/qwen3-reranker-8b`, `mode: rerank`, api_base …:8002) — the
-   provider error is gone and **infinity actually scores the documents now**.
-2. *(STILL BLOCKED)* the gateway's litellm then 500s serializing the response:
-   `3 validation errors for RerankResponse … results.N.document.text: Input should be
-   a valid string` — infinity returns `document` as `{'text': …, 'multi_modal': None}`
-   (a dict) but the gateway's litellm `RerankResponse` expects `document.text` to be a
-   string. `return_documents:false` does NOT help (validation is on the gateway's
-   response model). This is a litellm-version vs infinity-response-shape mismatch,
-   purely gateway-side — our client is correct against the standard contract.
-   **FIX FOUND + locally verified (2026-06-23): use the `hosted_vllm` provider, not
-   `infinity`.** The model is vLLM-served, and litellm's `infinity` rerank transform
-   mishandles vLLM/infinity's object-form `document` (`{text, multi_modal}`), assigning
-   the whole object to `RerankResponse.document.text` (expects str). `return_documents`
-   does NOT help — infinity ignores it and always echoes documents. litellm's
-   `hosted_vllm` rerank transform parses the same response cleanly (verified locally
-   with `litellm.rerank(model="hosted_vllm/qwen3-reranker-8b", api_base=…:8002/v1,
-   api_key="EMPTY")` → clean `index`+`relevance_score`, with or without the `/v1`
-   suffix). **Gateway config change (no code change on our side):** in the
-   `qwen-reranker` entry set `model: hosted_vllm/qwen3-reranker-8b` (was
-   `infinity/qwen3-reranker-8b`), keep `mode: rerank`, reload the gateway. Then set
-   `DBAGENT_EXAMPLE_RERANK=true` (+ `DBAGENT_EXAMPLE_INDEX_PATH`) to go live. Reference:
-   vLLM serves Qwen3-Reranker via `/v1/rerank` with `--hf_overrides` architecture
-   `Qwen3ForSequenceClassification`; document is an object `{text}` by design.
 
 ### Permission policy (Phase 1, confirmed with the user)
 
