@@ -23,13 +23,19 @@ def test_litellm_client_satisfies_protocol_without_calling():
     assert isinstance(client, LLMClient)
 
 
+def _chunk(content):
+    delta = types.SimpleNamespace(content=content)
+    return types.SimpleNamespace(choices=[types.SimpleNamespace(delta=delta)])
+
+
 def _install_fake_litellm(monkeypatch, capture):
     fake = types.ModuleType("litellm")
 
     def completion(**kwargs):
         capture.update(kwargs)
-        msg = types.SimpleNamespace(content="SELECT 1")
-        return types.SimpleNamespace(choices=[types.SimpleNamespace(message=msg)])
+        # Streaming: yield "SELECT 1" in pieces, then a content=None chunk
+        # (role-only / finish) to exercise the accumulator's guard.
+        return iter([_chunk("SEL"), _chunk("ECT"), _chunk(" 1"), _chunk(None)])
 
     fake.completion = completion
     monkeypatch.setitem(sys.modules, "litellm", fake)
@@ -41,6 +47,7 @@ def test_client_disables_thinking_by_default(monkeypatch):
     client = LiteLLMClient(Settings(_env_file=None))
     out = client.complete("qwen-code", [{"role": "user", "content": "hi"}])
     assert out == "SELECT 1"
+    assert capture["stream"] is True
     assert capture["extra_body"] == {"chat_template_kwargs": {"enable_thinking": False}}
     assert capture["model"] == "openai/qwen-code"
 

@@ -34,12 +34,23 @@ class LiteLLMClient:
     def complete(self, model: str, messages: list[dict[str, str]]) -> str:
         import litellm
 
-        resp = litellm.completion(
+        # Stream and accumulate. Streaming keeps chunks flowing over the gateway
+        # connection during long generations (e.g. SQL gen), so it never sits idle
+        # long enough to trip the upstream timeout (the chronic "504"). The method
+        # still returns the full joined string — callers are unchanged. See
+        # https://docs.litellm.ai/stream
+        stream = litellm.completion(
             model=f"openai/{model}",
             api_base=self._base_url,
             api_key=self._api_key,
             messages=messages,
             extra_body=self._extra_body,
             timeout=self._timeout,
+            stream=True,
         )
-        return resp.choices[0].message.content or ""
+        parts: list[str] = []
+        for chunk in stream:
+            piece = chunk.choices[0].delta.content
+            if piece:  # role-only / finish chunks carry delta.content = None
+                parts.append(piece)
+        return "".join(parts)
