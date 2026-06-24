@@ -67,8 +67,13 @@ live-verified end-to-end. The chain (all layers built):
 ```
 domain route / clarify → context assembly (yaml) → SQL gen (qwen-code)
   → sqlglot validate + permission inject (sql/secure.py) → read-replica exec
-  → self-correct (≤3) → DuckDB analyze → vetted stats → NL answer + SQL (POST /query)
+  → self-correct (≤3) → DuckDB analyze → vetted stats → NL answer + SQL
+  (SSE-streamed token-by-token via POST /query/stream)
 ```
+
+The whole chain is **async end-to-end**: `run_agent` / `run_agent_stream` are
+coroutines, LLM calls await `acompletion` (streamed), DB stays sync via
+`to_thread`. The answer **streams over SSE** (`POST /query/stream`).
 
 Current capabilities (history/forensics live in git + `docs/superpowers/specs/` and
 the subdir `CLAUDE.md` files — do not reproduce it here):
@@ -112,8 +117,10 @@ the subdir `CLAUDE.md` files — do not reproduce it here):
 - **frontend**: a self-contained chat UI at `GET /` (`src/db_agent/web/index.html`,
   zero deps). Three status branches (answered/clarify/error); collapsible SQL +
   result table; auto-charting (bar / single & grouped multi-series line, inferred
-  from columns). Preview offline via `.claude/launch.json` (`web-static`); end-to-end
-  needs the running app (`uv run uvicorn db_agent.api.app:app`).
+  from columns). Streams the answer token-by-token over SSE; the final answer is rendered
+  as a **GFM-subset markdown** (tables/bold/lists/code, zero deps). Preview offline via
+  `.claude/launch.json` (`web-static`); end-to-end needs the running app
+  (`uv run uvicorn db_agent.api.app:app`).
 
 **LLM/gateway gotcha (important, cross-cutting):** Qwen3 models default to *thinking
 mode* (long reasoning before the answer → heavy prompts blow past the gateway timeout;
@@ -167,7 +174,8 @@ src/db_agent/
   graph/           # LangGraph: state.py (AgentState, Deps), nodes.py, build.py.
                    #   Flow: route → [extract→resolve] → assemble → retrieve_examples
                    #   → generate_sql → guard → execute → analyze → stats → answer
-  api/             # FastAPI: app.py (create_app, POST /query, GET /health, GET /)
+  api/             # FastAPI: app.py (create_app, POST /query/stream [SSE], GET /health,
+                   #   GET /); SSE emits token/final/error events; final carries QueryResponse
   web/             # single-file chat UI (index.html, inline CSS+JS, zero deps);
                    #   served at GET / via FileResponse; auto-charts numeric results
   observability/   # RunRecord (+result_sample) + sinks (Jsonl/Postgres/Null) +
@@ -239,7 +247,9 @@ unless 3.11 support is explicitly dropped.
   **`ReadReplica.fetch(sql, params)`** is for trusted hand-written parameterized
   queries (e.g. gene resolution) — value always bound, never interpolated.
 - **Tests:** `uv run pytest` is offline (DB/LLM faked, `integration` deselected);
-  `uv run pytest -m integration` runs live-DB tests (needs `.env` DSN).
+  `uv run pytest -m integration` runs live-DB tests (needs `.env` DSN). The LLM client
+  is **async** — offline fakes must make `complete` / `acompletion` coroutines, else
+  the chain `await`s a plain value and breaks.
 - `model_ccle_expression_data` is ~36M rows — the big-table EXPLAIN gate is real
   and live-verified (it rejects a `SELECT AVG(...) FROM` with no filter).
 - **`.claude/` automations** (committed): PreToolUse confirm on edits to
