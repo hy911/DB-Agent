@@ -10,12 +10,13 @@ from __future__ import annotations
 import asyncio
 import logging
 
+from langgraph.config import get_stream_writer
 from langgraph.graph import END
 
 from db_agent.graph.state import AgentState, Deps
 from db_agent.llm import analyze_sql as llm_analyze_sql
-from db_agent.llm import answer as llm_answer
-from db_agent.llm import answer_stat as llm_answer_stat
+from db_agent.llm import answer_stat_stream as llm_answer_stat_stream
+from db_agent.llm import answer_stream as llm_answer_stream
 from db_agent.llm import extract_genes as llm_extract_genes
 from db_agent.llm import generate_sql as llm_generate_sql
 from db_agent.llm import request_stat as llm_request_stat
@@ -176,10 +177,20 @@ async def answer_node(state: AgentState, deps: Deps) -> dict:
     # regardless of this step. So if the final NL-answer LLM call fails (commonly a
     # gateway 504 under load), degrade to a fallback note instead of failing the whole
     # query with a 502 and losing the data the user already paid to compute.
+    #
+    # Token pieces are pushed to the LangGraph stream writer for live display. Under
+    # `invoke` (the non-streaming run_agent) the writer drops them; under
+    # `astream(stream_mode="custom")` (run_agent_stream) they reach the client.
+    # Outside a graph run (direct unit-test call) get_stream_writer raises — degrade
+    # to a no-op so the node stays callable in isolation.
+    try:
+        writer = get_stream_writer()
+    except RuntimeError:
+        writer = lambda _piece: None  # noqa: E731
     try:
         stat = state.get("stat_result")
         if stat is not None:
-            text = await llm_answer_stat(
+            gen = llm_answer_stat_stream(
                 deps.llm,
                 deps.settings,
                 state["question"],
@@ -187,17 +198,19 @@ async def answer_node(state: AgentState, deps: Deps) -> dict:
                 state.get("analysis_sql"),
                 stat,
             )
-            return {"answer": text, "status": "answered"}
-        analysis = state.get("analysis")
-        if analysis is not None:
-            text = await llm_answer(
-                deps.llm, deps.settings, state["question"], state["analysis_sql"], analysis
+        elif state.get("analysis") is not None:
+            gen = llm_answer_stream(
+                deps.llm, deps.settings, state["question"], state["analysis_sql"], state["analysis"]
             )
         else:
-            text = await llm_answer(
+            gen = llm_answer_stream(
                 deps.llm, deps.settings, state["question"], state["secured_sql"], state["result"]
             )
-        return {"answer": text, "status": "answered"}
+        parts: list[str] = []
+        async for piece in gen:
+            parts.append(piece)
+            writer({"token": piece})
+        return {"answer": "".join(parts).strip(), "status": "answered"}
     except Exception:
         logger.exception("answer generation failed; degrading to data+SQL only")
         return {"answer": _ANSWER_FALLBACK, "status": "answered"}

@@ -3,7 +3,7 @@ from __future__ import annotations
 from db_agent.config import Settings
 from db_agent.db import QueryResult
 from db_agent.db.gene_resolver import GeneMatch, GeneResolution
-from db_agent.graph.build import run_agent
+from db_agent.graph.build import run_agent, run_agent_stream
 from db_agent.semantic import load_semantic_layer
 from db_agent.sql.errors import GuardError
 
@@ -17,6 +17,9 @@ class _LLM:
 
     async def complete(self, model, messages):
         return self.by_model[model].pop(0)
+
+    async def complete_stream(self, model, messages):
+        yield self.by_model[model].pop(0)
 
 
 class _Replica:
@@ -327,3 +330,56 @@ async def test_stats_end_to_end_runs_test():
     assert res.status == "answered"
     assert res.answer == "The two groups differ significantly (p<0.05)."
     assert res.stat_request is not None and "welch_t_test" in res.stat_request
+
+
+class _StreamLLM:
+    """Like _LLM but the answer model streams its reply in several pieces."""
+
+    def __init__(self, by_model, answer_pieces):
+        self.by_model = {k: list(v) for k, v in by_model.items()}
+        self.answer_pieces = list(answer_pieces)
+
+    async def complete(self, model, messages):
+        return self.by_model[model].pop(0)
+
+    async def complete_stream(self, model, messages):
+        if model == SETTINGS.model_route:  # the answer step streams piecewise
+            for p in self.answer_pieces:
+                yield p
+        else:
+            yield self.by_model[model].pop(0)
+
+
+async def test_run_agent_stream_emits_tokens_then_final():
+    llm = _StreamLLM(
+        {
+            "qwen-fast": ["efficacy"],
+            "qwen-code": ["SELECT drug_name FROM model_efficacy_info", "NONE", "NONE"],
+        },
+        answer_pieces=["Found ", "1 ", "drug."],
+    )
+    events = [
+        e
+        async for e in run_agent_stream(
+            "how many?", llm=llm, replica=_Replica([_qr()]), layer=LAYER, settings=SETTINGS
+        )
+    ]
+    tokens = [e["text"] for e in events if e["type"] == "token"]
+    assert tokens == ["Found ", "1 ", "drug."]
+    final = events[-1]
+    assert final["type"] == "final"
+    assert final["result"].status == "answered"
+    assert final["result"].answer == "Found 1 drug."
+    assert "for_bd" in final["result"].sql.lower()
+
+
+async def test_run_agent_stream_clarify_has_no_tokens():
+    llm = _StreamLLM({"qwen-fast": ["clarify: which drug?"]}, answer_pieces=[])
+    events = [
+        e
+        async for e in run_agent_stream(
+            "how is it?", llm=llm, replica=_Replica([]), layer=LAYER, settings=SETTINGS
+        )
+    ]
+    assert not [e for e in events if e["type"] == "token"]
+    assert events[-1]["result"].status == "clarify"

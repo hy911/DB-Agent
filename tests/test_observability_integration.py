@@ -18,6 +18,9 @@ class _LLM:
     async def complete(self, model, messages):
         return self.by_model[model].pop(0)
 
+    async def complete_stream(self, model, messages):
+        yield self.by_model[model].pop(0)
+
 
 class _Replica:
     def __init__(self, script):

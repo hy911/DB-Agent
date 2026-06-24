@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import time
 import uuid
-from collections.abc import Callable
+from collections.abc import AsyncIterator, Callable
 from functools import partial
 
 from langgraph.graph import END, START, StateGraph
@@ -60,6 +60,52 @@ def build_graph(deps: Deps):
     return g.compile()
 
 
+def _build_deps(
+    *,
+    llm: LLMClient,
+    replica: ReadReplica,
+    layer: SemanticLayer,
+    settings: Settings,
+    resolve_gene: Callable[[ReadReplica, str], GeneResolution] | None,
+    run_sandbox: Callable[[list[str], list[dict[str, object]], str], QueryResult] | None,
+    run_stat: Callable[[list[str], list[dict[str, object]], str], StatResult] | None,
+    retrieve_examples: Retriever | None,
+) -> Deps:
+    deps_kwargs = {"llm": llm, "replica": replica, "layer": layer, "settings": settings}
+    if resolve_gene is not None:
+        deps_kwargs["resolve_gene"] = resolve_gene
+    if run_sandbox is not None:
+        deps_kwargs["run_sandbox"] = run_sandbox
+    if run_stat is not None:
+        deps_kwargs["run_stat"] = run_stat
+    if retrieve_examples is not None:
+        deps_kwargs["retrieve_examples"] = retrieve_examples
+    return Deps(**deps_kwargs)
+
+
+def _emit_record(
+    observer: Observer | None,
+    final: AgentState,
+    *,
+    run_id: str,
+    latency_ms: float,
+    settings: Settings,
+) -> None:
+    if observer is None:
+        return
+    try:
+        observer(
+            RunRecord.from_state(
+                final,
+                run_id=run_id,
+                latency_ms=latency_ms,
+                result_sample_rows=settings.audit_result_sample_rows,
+            )
+        )
+    except Exception:
+        pass  # observability is best-effort; never break a good answer
+
+
 async def run_agent(
     question: str,
     *,
@@ -73,31 +119,64 @@ async def run_agent(
     run_stat: Callable[[list[str], list[dict[str, object]], str], StatResult] | None = None,
     retrieve_examples: Retriever | None = None,
 ) -> AgentResult:
-    deps_kwargs = {"llm": llm, "replica": replica, "layer": layer, "settings": settings}
-    if resolve_gene is not None:
-        deps_kwargs["resolve_gene"] = resolve_gene
-    if run_sandbox is not None:
-        deps_kwargs["run_sandbox"] = run_sandbox
-    if run_stat is not None:
-        deps_kwargs["run_stat"] = run_stat
-    if retrieve_examples is not None:
-        deps_kwargs["retrieve_examples"] = retrieve_examples
-    deps = Deps(**deps_kwargs)
+    deps = _build_deps(
+        llm=llm,
+        replica=replica,
+        layer=layer,
+        settings=settings,
+        resolve_gene=resolve_gene,
+        run_sandbox=run_sandbox,
+        run_stat=run_stat,
+        retrieve_examples=retrieve_examples,
+    )
     graph = build_graph(deps)
     run_id = uuid.uuid4().hex
     start = time.perf_counter()
     final = await graph.ainvoke(initial_state(question))
     latency_ms = (time.perf_counter() - start) * 1000.0
-    if observer is not None:
-        try:
-            observer(
-                RunRecord.from_state(
-                    final,
-                    run_id=run_id,
-                    latency_ms=latency_ms,
-                    result_sample_rows=settings.audit_result_sample_rows,
-                )
-            )
-        except Exception:
-            pass  # observability is best-effort; never break a good answer
+    _emit_record(observer, final, run_id=run_id, latency_ms=latency_ms, settings=settings)
     return to_result(final, run_id=run_id)
+
+
+async def run_agent_stream(
+    question: str,
+    *,
+    llm: LLMClient,
+    replica: ReadReplica,
+    layer: SemanticLayer,
+    settings: Settings,
+    observer: Observer | None = None,
+    resolve_gene: Callable[[ReadReplica, str], GeneResolution] | None = None,
+    run_sandbox: Callable[[list[str], list[dict[str, object]], str], QueryResult] | None = None,
+    run_stat: Callable[[list[str], list[dict[str, object]], str], StatResult] | None = None,
+    retrieve_examples: Retriever | None = None,
+) -> AsyncIterator[dict]:
+    """Streaming twin of `run_agent`: yields `{"type":"token", ...}` events as the
+    answer is generated, then a single `{"type":"final","result": AgentResult}`
+    once the run completes (and the RunRecord has been logged). Clarify/error
+    branches emit no tokens — just the final event."""
+    deps = _build_deps(
+        llm=llm,
+        replica=replica,
+        layer=layer,
+        settings=settings,
+        resolve_gene=resolve_gene,
+        run_sandbox=run_sandbox,
+        run_stat=run_stat,
+        retrieve_examples=retrieve_examples,
+    )
+    graph = build_graph(deps)
+    run_id = uuid.uuid4().hex
+    start = time.perf_counter()
+    final: AgentState | None = None
+    async for mode, chunk in graph.astream(
+        initial_state(question), stream_mode=["custom", "values"]
+    ):
+        if mode == "custom":
+            yield {"type": "token", "text": chunk["token"]}
+        else:  # "values": full state after each step; the last one is final
+            final = chunk
+    latency_ms = (time.perf_counter() - start) * 1000.0
+    assert final is not None  # astream always emits at least the terminal state
+    _emit_record(observer, final, run_id=run_id, latency_ms=latency_ms, settings=settings)
+    yield {"type": "final", "result": to_result(final, run_id=run_id)}

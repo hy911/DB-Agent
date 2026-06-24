@@ -11,6 +11,9 @@ class _FakeClient:
     async def complete(self, model: str, messages: list[dict[str, str]]) -> str:
         return "ok"
 
+    async def complete_stream(self, model: str, messages: list[dict[str, str]]):
+        yield "ok"
+
 
 def test_fake_satisfies_protocol():
     assert isinstance(_FakeClient(), LLMClient)
@@ -63,3 +66,14 @@ async def test_client_thinking_can_be_enabled(monkeypatch):
     client = LiteLLMClient(Settings(_env_file=None, llm_enable_thinking=True))
     await client.complete("qwen-main", [{"role": "user", "content": "hi"}])
     assert capture["extra_body"] == {"chat_template_kwargs": {"enable_thinking": True}}
+
+
+async def test_complete_stream_yields_pieces(monkeypatch):
+    capture: dict = {}
+    _install_fake_litellm(monkeypatch, capture)
+    client = LiteLLMClient(Settings(_env_file=None))
+    pieces = [
+        p async for p in client.complete_stream("qwen-code", [{"role": "user", "content": "hi"}])
+    ]
+    assert pieces == ["SEL", "ECT", " 1"]  # None chunk dropped
+    assert capture["stream"] is True

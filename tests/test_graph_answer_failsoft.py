@@ -20,6 +20,11 @@ class _LLM:
             raise RuntimeError("gateway 504")
         return self.by_model[model].pop(0)
 
+    async def complete_stream(self, model, messages):
+        if model == SETTINGS.model_route:  # the answer step
+            raise RuntimeError("gateway 504")
+        yield self.by_model[model].pop(0)
+
 
 class _Replica:
     def __init__(self, script):

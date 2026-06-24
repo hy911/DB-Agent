@@ -8,6 +8,7 @@ module (and constructing the client) never touches the network.
 
 from __future__ import annotations
 
+from collections.abc import AsyncIterator
 from typing import Protocol, runtime_checkable
 
 from db_agent.config import Settings
@@ -16,6 +17,8 @@ from db_agent.config import Settings
 @runtime_checkable
 class LLMClient(Protocol):
     async def complete(self, model: str, messages: list[dict[str, str]]) -> str: ...
+
+    def complete_stream(self, model: str, messages: list[dict[str, str]]) -> AsyncIterator[str]: ...
 
 
 class LiteLLMClient:
@@ -31,15 +34,20 @@ class LiteLLMClient:
             "chat_template_kwargs": {"enable_thinking": settings.llm_enable_thinking}
         }
 
-    async def complete(self, model: str, messages: list[dict[str, str]]) -> str:
+    async def complete_stream(
+        self, model: str, messages: list[dict[str, str]]
+    ) -> AsyncIterator[str]:
+        """Yield answer token pieces as they arrive.
+
+        acompletion(stream=True) yields an async iterator of chunks; streaming keeps
+        the gateway connection alive during long generations (e.g. SQL gen) so it
+        never sits idle long enough to trip the upstream timeout (the chronic
+        "504"), and being async means the I/O never blocks the event loop. The
+        answer node forwards these pieces to the client for live display; every
+        other call site drains them via `complete`. See https://docs.litellm.ai/stream
+        """
         import litellm
 
-        # Async stream + accumulate. acompletion(stream=True) yields an async
-        # iterator of chunks; streaming keeps the gateway connection alive during
-        # long generations (e.g. SQL gen) so it never sits idle long enough to trip
-        # the upstream timeout (the chronic "504"), and being async means the I/O
-        # never blocks the event loop. Still returns the full joined string —
-        # callers just await. See https://docs.litellm.ai/stream
         stream = await litellm.acompletion(
             model=f"openai/{model}",
             api_base=self._base_url,
@@ -49,9 +57,12 @@ class LiteLLMClient:
             timeout=self._timeout,
             stream=True,
         )
-        parts: list[str] = []
         async for chunk in stream:
             piece = chunk.choices[0].delta.content
             if piece:  # role-only / finish chunks carry delta.content = None
-                parts.append(piece)
+                yield piece
+
+    async def complete(self, model: str, messages: list[dict[str, str]]) -> str:
+        # Drain the token stream into the full string — single network path.
+        parts = [piece async for piece in self.complete_stream(model, messages)]
         return "".join(parts)

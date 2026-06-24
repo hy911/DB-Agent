@@ -1043,7 +1043,21 @@
     if (cappedG) panel.appendChild(el("div", "chart-note", "仅展示前 8 个分组。"));
   }
 
-  // ── send flow ─────────────────────────────────────────
+  // ── live streaming answer area ────────────────────────
+  // Before the final payload arrives we show tokens as they stream. The final
+  // event re-renders the card authoritatively (badge / SQL / table / chart).
+  function startLiveAnswer(card) {
+    card.innerHTML = "";
+    card.setAttribute("data-status", "answered");
+    var head = el("div", "agent-head");
+    head.appendChild(el("span", "agent-name", "DB-Agent"));
+    card.appendChild(head);
+    var ans = el("div", "answer");
+    card.appendChild(ans);
+    return ans;
+  }
+
+  // ── send flow (SSE streaming) ─────────────────────────
   function ask(text) {
     text = (text || "").trim();
     if (!text || busy) return;
@@ -1054,22 +1068,7 @@
     ta.value = "";
     autosize();
     var card = addThinking();
-
-    fetch("/query", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ question: text })
-    })
-      .then(function (r) {
-        return r.json().then(function (body) { return { ok: r.ok, status: r.status, body: body }; });
-      })
-      .then(function (res) {
-        if (!res.ok) {
-          fillAgent(card, { status: "error", error: networkMessage(res.status, res.body) });
-        } else {
-          fillAgent(card, res.body);
-        }
-      })
+    streamQuery(text, card)
       .catch(function () {
         fillAgent(card, { status: "error", error: "无法连接到服务，请确认后端正在运行后重试。" });
       })
@@ -1081,9 +1080,56 @@
       });
   }
 
-  function networkMessage(httpStatus, body) {
-    if (body && body.detail) return "服务端错误（" + httpStatus + "）：" + body.detail;
-    return "服务端返回错误（HTTP " + httpStatus + "）。";
+  function streamQuery(text, card) {
+    return fetch("/query/stream", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ question: text })
+    }).then(function (r) {
+      if (!r.ok || !r.body) {
+        return r.text().then(function () {
+          fillAgent(card, { status: "error", error: "服务端返回错误（HTTP " + r.status + "）。" });
+        });
+      }
+      var reader = r.body.getReader();
+      var decoder = new TextDecoder();
+      var buf = "";
+      var answerEl = null;
+      var acc = "";
+
+      function onEvent(evt) {
+        if (evt.type === "token") {
+          if (!answerEl) answerEl = startLiveAnswer(card);
+          acc += evt.text;
+          answerEl.textContent = acc;
+          scrollDown();
+        } else if (evt.type === "final") {
+          fillAgent(card, evt.payload);
+        } else if (evt.type === "error") {
+          fillAgent(card, { status: "error", error: evt.detail });
+        }
+      }
+
+      function pump() {
+        return reader.read().then(function (res) {
+          if (res.done) {
+            return;
+          }
+          buf += decoder.decode(res.value, { stream: true });
+          var frames = buf.split("\n\n");
+          buf = frames.pop(); // keep the trailing partial frame
+          frames.forEach(function (frame) {
+            var line = frame.trim();
+            if (line.indexOf("data:") !== 0) return;
+            var payload = line.slice(5).trim();
+            if (!payload) return;
+            try { onEvent(JSON.parse(payload)); } catch (e) { /* ignore malformed frame */ }
+          });
+          return pump();
+        });
+      }
+      return pump();
+    });
   }
 
   // ── composer behaviour ────────────────────────────────

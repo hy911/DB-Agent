@@ -7,6 +7,7 @@ client.
 
 from __future__ import annotations
 
+from collections.abc import AsyncIterator
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
@@ -127,6 +128,37 @@ async def answer(
         settings.model_route, prompts.answer_messages(question, sql, preview)
     )
     return text.strip()
+
+
+async def answer_stream(
+    client: LLMClient,
+    settings: Settings,
+    question: str,
+    sql: str,
+    result: QueryResult,
+) -> AsyncIterator[str]:
+    """Token-yielding twin of `answer` — same prompt/model, streamed for live display."""
+    preview = _rows_preview(result)
+    async for piece in client.complete_stream(
+        settings.model_route, prompts.answer_messages(question, sql, preview)
+    ):
+        yield piece
+
+
+async def answer_stat_stream(
+    client: LLMClient,
+    settings: Settings,
+    question: str,
+    sql: str,
+    analysis_sql: str | None,
+    stat: StatResult,
+) -> AsyncIterator[str]:
+    """Token-yielding twin of `answer_stat`."""
+    summary = _format_stat(stat)
+    async for piece in client.complete_stream(
+        settings.model_route, prompts.stat_answer_messages(question, sql, analysis_sql, summary)
+    ):
+        yield piece
 
 
 def _strip_fences(text: str) -> str:

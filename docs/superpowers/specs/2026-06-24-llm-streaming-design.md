@@ -55,6 +55,56 @@ No usage tracking (no `stream_options`), no new dependency, no settings change.
 `POST /query/stream` SSE endpoint streaming only the answer node; frontend
 fetch-stream consumption.
 
+## Phase 2 — End-to-end SSE streaming (approved 2026-06-24)
+
+User decisions: **in-graph StreamWriter** (not API-layer), **SSE** transport,
+**drop the non-streaming `POST /query` endpoint** (frontend goes streaming-only).
+
+### Mechanism (verified)
+
+Under `ainvoke`, `langgraph.config.get_stream_writer()` returns a writer whose
+writes are dropped (no raise) — so the answer node can *always* stream to the
+writer. Under `astream(stream_mode=["custom","values"])`, custom writes are
+delivered as `("custom", chunk)` and the final state as the last `("values", …)`.
+
+### Changes
+
+- `llm/client.py`: add `complete_stream(model, messages) -> AsyncIterator[str]`
+  (async generator over `acompletion(stream=True)`). `complete` is reimplemented
+  to drain `complete_stream` and join — single network path.
+- `llm/agent_llm.py`: add async-generator `answer_stream` and `answer_stat_stream`
+  that yield token pieces (same prompts/models as `answer`/`answer_stat`).
+- `graph/nodes.py`: `answer_node` gets the stream writer, picks the right token
+  generator (stat / analysis / raw), iterates it pushing `{"token": piece}` to the
+  writer while accumulating, and returns `{"answer": joined.strip(), "status":
+  "answered"}`. Fail-soft unchanged. Under `invoke` the writes are dropped, so the
+  non-streaming `run_agent` is unaffected.
+- `graph/build.py`: factor `_build_deps(...)`; add `run_agent_stream(...)` async
+  generator that drives `graph.astream(stream_mode=["custom","values"])`, yielding
+  `{"type":"token","text":…}` per token and finally `{"type":"final","payload":…}`
+  (the `QueryResponse` dict) after logging the `RunRecord`. `run_agent` (invoke)
+  stays for tests/internal.
+- `api/app.py`: **remove `POST /query`**; add `POST /query/stream` returning a
+  `StreamingResponse` (media_type `text/event-stream`, `Cache-Control: no-cache`,
+  `X-Accel-Buffering: no`) that serializes each event as `data: {json}\n\n`. An
+  infra exception becomes a single `{"type":"error","detail":…}` event.
+- `web/index.html`: `ask()` POSTs `/query/stream`, reads the body via
+  `getReader()`, parses SSE `data:` lines, appends tokens into a live answer area,
+  and on `final` calls the existing `fillAgent(card, payload)` to render
+  status/SQL/table/chart. `error` event → error card. `/health` unchanged.
+
+### Tests
+
+- `complete_stream` yields pieces; `complete` still accumulates.
+- All fakes gain an `async def complete_stream` (yields the scripted reply); the
+  answer node now calls `complete_stream`, so chain/api/observability/failsoft
+  fakes need it (failsoft raises on `model_route`).
+- New: answer-node streams tokens to the writer (asserted via `astream` custom);
+  `run_agent_stream` yields token events then a final payload; `POST /query/stream`
+  returns SSE token+final events for answered, and a final clarify/error event for
+  those branches; infra error yields an `error` event.
+- Removed: the old `POST /query` endpoint tests (replaced by `/query/stream`).
+
 ## Phase 1b — Full-chain async (follow-up, approved)
 
 Phase 1 streamed synchronously. Follow-up: make the whole call chain async so the

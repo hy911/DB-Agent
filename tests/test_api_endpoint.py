@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+
 from fastapi.testclient import TestClient
 
 from db_agent.api.app import create_app
@@ -13,6 +15,21 @@ SETTINGS = Settings(_env_file=None)
 LAYER = load_semantic_layer(SETTINGS.semantic_layer_path)
 
 
+def _sse_events(resp):
+    """Parse `data: {json}` SSE frames from a buffered TestClient response body."""
+    events = []
+    for frame in resp.text.split("\n\n"):
+        line = frame.strip()
+        if line.startswith("data:"):
+            events.append(json.loads(line[5:].strip()))
+    return events
+
+
+def _ask(client, question):
+    resp = client.post("/query/stream", json={"question": question})
+    return resp, _sse_events(resp)
+
+
 class _LLM:
     def __init__(self, by_model):
         self.by_model = {k: list(v) for k, v in by_model.items()}
@@ -20,10 +37,17 @@ class _LLM:
     async def complete(self, model, messages):
         return self.by_model[model].pop(0)
 
+    async def complete_stream(self, model, messages):
+        yield self.by_model[model].pop(0)
+
 
 class _RaisingLLM:
     async def complete(self, model, messages):
         raise RuntimeError("gateway down")
+
+    async def complete_stream(self, model, messages):
+        raise RuntimeError("gateway down")
+        yield  # pragma: no cover  (makes this an async generator)
 
 
 class _Replica:
@@ -68,7 +92,7 @@ def test_index_serves_ui():
     assert "DB" in resp.text and "/query" in resp.text
 
 
-def test_query_answered_includes_rows():
+def test_query_streams_tokens_then_final_with_rows():
     llm = _LLM(
         {
             "qwen-fast": ["efficacy"],
@@ -77,28 +101,35 @@ def test_query_answered_includes_rows():
         }
     )
     with _client(llm, _Replica([_qr()])) as client:
-        resp = client.post("/query", json={"question": "how many?"})
+        resp, events = _ask(client, "how many?")
     assert resp.status_code == 200
-    body = resp.json()
-    assert body["status"] == "answered"
-    assert body["answer"] == "Found 1 drug."
-    assert "for_bd" in body["sql"].lower()
-    assert body["rows"]["rowcount"] == 1
-    assert body["rows"]["columns"] == ["drug_name"]
+    assert resp.headers["content-type"].startswith("text/event-stream")
+    # the answer streamed at least one token
+    tokens = [e for e in events if e["type"] == "token"]
+    assert tokens and "".join(t["text"] for t in tokens) == "Found 1 drug."
+    final = events[-1]
+    assert final["type"] == "final"
+    payload = final["payload"]
+    assert payload["status"] == "answered"
+    assert payload["answer"] == "Found 1 drug."
+    assert "for_bd" in payload["sql"].lower()
+    assert payload["rows"]["rowcount"] == 1
+    assert payload["rows"]["columns"] == ["drug_name"]
 
 
-def test_query_clarify_has_no_rows():
+def test_query_clarify_emits_no_tokens():
     llm = _LLM({"qwen-fast": ["clarify: which drug?"]})
     with _client(llm, _Replica([])) as client:
-        resp = client.post("/query", json={"question": "how is it?"})
-    assert resp.status_code == 200
-    body = resp.json()
-    assert body["status"] == "clarify"
-    assert "which drug?" in body["clarification"]
-    assert body["rows"] is None
+        _, events = _ask(client, "how is it?")
+    assert not [e for e in events if e["type"] == "token"]  # never reaches answer
+    final = events[-1]
+    assert final["type"] == "final"
+    assert final["payload"]["status"] == "clarify"
+    assert "which drug?" in final["payload"]["clarification"]
+    assert final["payload"]["rows"] is None
 
 
-def test_query_fatal_guard_error_is_200_error():
+def test_query_fatal_guard_error_final_is_error():
     llm = _LLM(
         {
             "qwen-fast": ["efficacy"],
@@ -107,21 +138,23 @@ def test_query_fatal_guard_error_is_200_error():
     )
     replica = _Replica([GuardError("big_table_scan", "seq scan", retryable=False)])
     with _client(llm, replica) as client:
-        resp = client.post("/query", json={"question": "scan it"})
-    assert resp.status_code == 200
-    assert resp.json()["status"] == "error"
+        _, events = _ask(client, "scan it")
+    assert events[-1]["type"] == "final"
+    assert events[-1]["payload"]["status"] == "error"
 
 
-def test_query_llm_exception_is_502():
+def test_query_llm_exception_emits_error_event():
     with _client(_RaisingLLM(), _Replica([])) as client:
-        resp = client.post("/query", json={"question": "boom"})
-    assert resp.status_code == 502
-    assert resp.json()["detail"].startswith("agent backend error")
+        resp, events = _ask(client, "boom")
+    # the stream already started (200); the failure surfaces as a terminal error event
+    assert resp.status_code == 200
+    assert events[-1]["type"] == "error"
+    assert events[-1]["detail"].startswith("agent backend error")
 
 
 def test_query_missing_question_is_422():
     with _client(_LLM({}), _Replica([])) as client:
-        resp = client.post("/query", json={})
+        resp = client.post("/query/stream", json={})
     assert resp.status_code == 422
 
 
@@ -137,7 +170,8 @@ def test_query_invokes_observer():
     deps = Deps(llm=llm, replica=_Replica([_qr()]), layer=LAYER, settings=SETTINGS)
     app = create_app(deps=deps, observer=records.append)
     with TestClient(app) as client:
-        resp = client.post("/query", json={"question": "how many?"})
+        resp, events = _ask(client, "how many?")
     assert resp.status_code == 200
+    assert events[-1]["payload"]["status"] == "answered"
     assert len(records) == 1
     assert records[0].status == "answered"

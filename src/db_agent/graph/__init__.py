@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from db_agent.graph.build import build_graph, run_agent
+from db_agent.graph.build import build_graph, run_agent, run_agent_stream
 from db_agent.graph.state import AgentResult, AgentState
 
-__all__ = ["AgentResult", "AgentState", "build_graph", "run_agent"]
+__all__ = ["AgentResult", "AgentState", "build_graph", "run_agent", "run_agent_stream"]
