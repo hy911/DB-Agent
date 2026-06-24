@@ -119,6 +119,7 @@
   /* ── message stream ──────────────────────────────────── */
   .stream {
     flex: 1 1 auto;
+    min-height: 0; /* allow the flex child to shrink so overflow-y can scroll */
     overflow-y: auto;
     padding: 24px 28px 8px;
     display: flex;
@@ -177,6 +178,7 @@
 
   /* user turn */
   .turn-user {
+    flex: none; /* never shrink inside the scrolling column — keep natural height */
     align-self: flex-end;
     max-width: 76%;
     background: var(--accent);
@@ -192,6 +194,7 @@
 
   /* agent turn — the signature card */
   .turn-agent {
+    flex: none; /* content defines height; must not be compressed by the column */
     align-self: stretch;
     position: relative;
     background: var(--surface);
@@ -260,6 +263,54 @@
   .answer.error-text {
     color: var(--error);
   }
+
+  /* rendered markdown answer — LLM replies arrive as GFM (tables, bold, lists) */
+  .answer.answer-md { white-space: normal; }
+  .answer-md > :first-child { margin-top: 0; }
+  .answer-md > :last-child { margin-bottom: 0; }
+  .answer-md p { margin: 0 0 10px; }
+  .answer-md strong { font-weight: 600; }
+  .answer-md em { font-style: italic; }
+  .answer-md ul, .answer-md ol { margin: 0 0 10px; padding-left: 22px; }
+  .answer-md li { margin: 2px 0; }
+  .answer-md h1, .answer-md h2, .answer-md h3, .answer-md h4 {
+    font-family: var(--font-display);
+    font-weight: 600;
+    line-height: 1.3;
+    margin: 14px 0 8px;
+  }
+  .answer-md h1 { font-size: 18px; }
+  .answer-md h2 { font-size: 16px; }
+  .answer-md h3, .answer-md h4 { font-size: 14.5px; }
+  .answer-md code {
+    font-family: var(--font-mono);
+    font-size: 12.5px;
+    background: var(--surface-sunk);
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    padding: 0 4px;
+  }
+  .answer-md a { color: var(--accent-deep); text-decoration: underline; }
+  .answer-md .md-table-scroll { overflow-x: auto; margin: 0 0 10px; }
+  .answer-md table {
+    border-collapse: collapse;
+    font-size: 13px;
+    min-width: 100%;
+  }
+  .answer-md th, .answer-md td {
+    text-align: left;
+    padding: 6px 11px;
+    border: 1px solid var(--line);
+    white-space: nowrap;
+  }
+  .answer-md thead th {
+    background: var(--surface-sunk);
+    font-family: var(--font-display);
+    font-weight: 600;
+    font-size: 12px;
+    color: var(--ink-soft);
+  }
+  .answer-md tbody tr:nth-child(even) td { background: rgba(22,32,30,0.018); }
   .clarify-hint, .error-hint {
     margin-top: 8px;
     font-size: 12.5px;
@@ -581,6 +632,100 @@
     if (empty && empty.parentNode) empty.parentNode.removeChild(empty);
   }
 
+  // ── minimal GFM renderer ──────────────────────────────
+  // LLM answers arrive as markdown (tables / bold / lists). Zero deps, so we
+  // render a safe subset ourselves. Everything is HTML-escaped first.
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, function (c) {
+      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
+    });
+  }
+  function mdInline(s) {
+    // operates on already-escaped text
+    s = s.replace(/`([^`]+)`/g, "<code>$1</code>");
+    s = s.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
+    s = s.replace(/(^|[^*])\*([^*\n]+)\*/g, "$1<em>$2</em>");
+    s = s.replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
+    return s;
+  }
+  function splitRow(line) {
+    var cells = line.replace(/^\s*\|/, "").replace(/\|\s*$/, "").split("|");
+    return cells.map(function (c) { return c.trim(); });
+  }
+  function isTableSep(line) {
+    return /\|/.test(line) && /^[\s|:-]+$/.test(line) && /-/.test(line);
+  }
+  function renderMarkdown(text) {
+    var lines = String(text == null ? "" : text).replace(/\r\n/g, "\n").split("\n");
+    var out = [];
+    var i = 0;
+    while (i < lines.length) {
+      var line = lines[i];
+
+      // GFM pipe table: header row + separator row + body rows
+      if (/\|/.test(line) && i + 1 < lines.length && isTableSep(lines[i + 1])) {
+        var header = splitRow(line);
+        i += 2; // skip header + separator
+        var body = [];
+        while (i < lines.length && /\|/.test(lines[i]) && lines[i].trim() !== "") {
+          body.push(splitRow(lines[i]));
+          i++;
+        }
+        var th = header.map(function (c) { return "<th>" + mdInline(escapeHtml(c)) + "</th>"; }).join("");
+        var trs = body.map(function (cells) {
+          var tds = header.map(function (_, ci) {
+            return "<td>" + mdInline(escapeHtml(cells[ci] == null ? "" : cells[ci])) + "</td>";
+          }).join("");
+          return "<tr>" + tds + "</tr>";
+        }).join("");
+        out.push('<div class="md-table-scroll"><table><thead><tr>' + th +
+          "</tr></thead><tbody>" + trs + "</tbody></table></div>");
+        continue;
+      }
+
+      // heading
+      var hm = /^(#{1,4})\s+(.*)$/.exec(line);
+      if (hm) {
+        var lvl = hm[1].length;
+        out.push("<h" + lvl + ">" + mdInline(escapeHtml(hm[2])) + "</h" + lvl + ">");
+        i++;
+        continue;
+      }
+
+      // list (consecutive bullet or ordered items)
+      if (/^\s*[-*]\s+/.test(line) || /^\s*\d+[.)]\s+/.test(line)) {
+        var ordered = /^\s*\d+[.)]\s+/.test(line);
+        var items = [];
+        while (i < lines.length && (/^\s*[-*]\s+/.test(lines[i]) || /^\s*\d+[.)]\s+/.test(lines[i]))) {
+          var item = lines[i].replace(/^\s*(?:[-*]|\d+[.)])\s+/, "");
+          items.push("<li>" + mdInline(escapeHtml(item)) + "</li>");
+          i++;
+        }
+        out.push((ordered ? "<ol>" : "<ul>") + items.join("") + (ordered ? "</ol>" : "</ul>"));
+        continue;
+      }
+
+      // blank line -> separator
+      if (line.trim() === "") { i++; continue; }
+
+      // paragraph: gather consecutive non-empty, non-special lines
+      var para = [];
+      while (
+        i < lines.length &&
+        lines[i].trim() !== "" &&
+        !/^(#{1,4})\s+/.test(lines[i]) &&
+        !/^\s*[-*]\s+/.test(lines[i]) &&
+        !/^\s*\d+[.)]\s+/.test(lines[i]) &&
+        !(/\|/.test(lines[i]) && i + 1 < lines.length && isTableSep(lines[i + 1]))
+      ) {
+        para.push(mdInline(escapeHtml(lines[i])));
+        i++;
+      }
+      out.push("<p>" + para.join("<br>") + "</p>");
+    }
+    return out.join("");
+  }
+
   // ── render: user turn ─────────────────────────────────
   function addUser(text) {
     var n = el("div", "turn-user fade-in", text);
@@ -630,7 +775,9 @@
     }
 
     // answered
-    card.appendChild(el("div", "answer", data.answer || "（无文字答案）"));
+    var ans = el("div", "answer answer-md");
+    ans.innerHTML = renderMarkdown(data.answer || "（无文字答案）");
+    card.appendChild(ans);
     if (data.sql) card.appendChild(buildSql(data.sql));
     var chart = data.rows ? buildChart(data.rows) : null;
     if (chart) card.appendChild(chart);
