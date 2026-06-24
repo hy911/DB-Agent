@@ -7,6 +7,8 @@ nodes catch GuardError and write a transient `outcome` the routers dispatch on.
 
 from __future__ import annotations
 
+import logging
+
 from langgraph.graph import END
 
 from db_agent.graph.state import AgentState, Deps
@@ -21,6 +23,12 @@ from db_agent.llm.agent_llm import _rows_preview
 from db_agent.sandbox.stats import catalog_text
 from db_agent.sql.errors import GuardError
 from db_agent.sql.secure import secure_query
+
+logger = logging.getLogger("db_agent.graph")
+
+# Shown when the SQL ran fine but the final NL-answer LLM call failed (e.g. gateway
+# 504). The data + SQL are already on the result, so degrade instead of 502-ing.
+_ANSWER_FALLBACK = "（自动摘要生成超时，已返回查询到的数据与所用 SQL，请直接查看下方结果。）"
 
 
 def route_node(state: AgentState, deps: Deps) -> dict:
@@ -162,27 +170,35 @@ def stats_node(state: AgentState, deps: Deps) -> dict:
 
 
 def answer_node(state: AgentState, deps: Deps) -> dict:
-    stat = state.get("stat_result")
-    if stat is not None:
-        text = llm_answer_stat(
-            deps.llm,
-            deps.settings,
-            state["question"],
-            state["secured_sql"],
-            state.get("analysis_sql"),
-            stat,
-        )
+    # The SQL has already run and the result/SQL are on the state — they are returned
+    # regardless of this step. So if the final NL-answer LLM call fails (commonly a
+    # gateway 504 under load), degrade to a fallback note instead of failing the whole
+    # query with a 502 and losing the data the user already paid to compute.
+    try:
+        stat = state.get("stat_result")
+        if stat is not None:
+            text = llm_answer_stat(
+                deps.llm,
+                deps.settings,
+                state["question"],
+                state["secured_sql"],
+                state.get("analysis_sql"),
+                stat,
+            )
+            return {"answer": text, "status": "answered"}
+        analysis = state.get("analysis")
+        if analysis is not None:
+            text = llm_answer(
+                deps.llm, deps.settings, state["question"], state["analysis_sql"], analysis
+            )
+        else:
+            text = llm_answer(
+                deps.llm, deps.settings, state["question"], state["secured_sql"], state["result"]
+            )
         return {"answer": text, "status": "answered"}
-    analysis = state.get("analysis")
-    if analysis is not None:
-        text = llm_answer(
-            deps.llm, deps.settings, state["question"], state["analysis_sql"], analysis
-        )
-    else:
-        text = llm_answer(
-            deps.llm, deps.settings, state["question"], state["secured_sql"], state["result"]
-        )
-    return {"answer": text, "status": "answered"}
+    except Exception:
+        logger.exception("answer generation failed; degrading to data+SQL only")
+        return {"answer": _ANSWER_FALLBACK, "status": "answered"}
 
 
 def _on_guard_error(state: AgentState, deps: Deps, e: GuardError) -> dict:
