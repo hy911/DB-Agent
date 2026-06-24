@@ -47,10 +47,10 @@ def health() -> dict:
 
 
 @router.post("/query", response_model=QueryResponse)
-def query(req: QueryRequest, request: Request) -> QueryResponse:
+async def query(req: QueryRequest, request: Request) -> QueryResponse:
     deps: Deps = request.app.state.deps
     try:
-        result = run_agent(
+        result = await run_agent(
             req.question,
             llm=deps.llm,
             replica=deps.replica,

@@ -60,7 +60,7 @@ def build_graph(deps: Deps):
     return g.compile()
 
 
-def run_agent(
+async def run_agent(
     question: str,
     *,
     llm: LLMClient,
@@ -86,7 +86,7 @@ def run_agent(
     graph = build_graph(deps)
     run_id = uuid.uuid4().hex
     start = time.perf_counter()
-    final = graph.invoke(initial_state(question))
+    final = await graph.ainvoke(initial_state(question))
     latency_ms = (time.perf_counter() - start) * 1000.0
     if observer is not None:
         try:

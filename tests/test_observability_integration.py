@@ -15,7 +15,7 @@ class _LLM:
     def __init__(self, by_model):
         self.by_model = {k: list(v) for k, v in by_model.items()}
 
-    def complete(self, model, messages):
+    async def complete(self, model, messages):
         return self.by_model[model].pop(0)
 
 
@@ -55,9 +55,9 @@ def test_settings_log_path_defaults_none():
     assert SETTINGS.observability_log_path is None
 
 
-def test_run_agent_emits_one_record():
+async def test_run_agent_emits_one_record():
     records: list[RunRecord] = []
-    res = run_agent(
+    res = await run_agent(
         "how many?",
         llm=_happy_llm(),
         replica=_Replica([_qr()]),
@@ -71,18 +71,18 @@ def test_run_agent_emits_one_record():
     assert "for_bd" in records[0].sql.lower()
 
 
-def test_run_agent_without_observer_is_unchanged():
-    res = run_agent(
+async def test_run_agent_without_observer_is_unchanged():
+    res = await run_agent(
         "how many?", llm=_happy_llm(), replica=_Replica([_qr()]), layer=LAYER, settings=SETTINGS
     )
     assert res.status == "answered"
 
 
-def test_observer_failure_does_not_break_the_run():
+async def test_observer_failure_does_not_break_the_run():
     def boom(record):
         raise RuntimeError("sink down")
 
-    res = run_agent(
+    res = await run_agent(
         "how many?",
         llm=_happy_llm(),
         replica=_Replica([_qr()]),
@@ -94,7 +94,7 @@ def test_observer_failure_does_not_break_the_run():
     assert res.answer == "Found 1 drug."
 
 
-def test_record_captures_stat_request():
+async def test_record_captures_stat_request():
     records: list[RunRecord] = []
     llm = _LLM(
         {
@@ -125,7 +125,7 @@ def test_record_captures_stat_request():
         sql="SELECT group_id, tgi_tv",
         elapsed_ms=1.0,
     )
-    run_agent(
+    await run_agent(
         "do groups differ?",
         llm=llm,
         replica=_Replica([raw]),

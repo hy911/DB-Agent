@@ -17,12 +17,12 @@ class _LLM:
     def __init__(self, by_model):
         self.by_model = {k: list(v) for k, v in by_model.items()}
 
-    def complete(self, model, messages):
+    async def complete(self, model, messages):
         return self.by_model[model].pop(0)
 
 
 class _RaisingLLM:
-    def complete(self, model, messages):
+    async def complete(self, model, messages):
         raise RuntimeError("gateway down")
 
 

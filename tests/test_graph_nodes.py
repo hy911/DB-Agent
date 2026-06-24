@@ -34,7 +34,7 @@ class _LLM:
     def __init__(self, by_model):
         self.by_model = {k: list(v) for k, v in by_model.items()}
 
-    def complete(self, model, messages):
+    async def complete(self, model, messages):
         return self.by_model[model].pop(0)
 
 
@@ -58,16 +58,16 @@ def _deps(llm=None, replica=None, resolve_gene=None):
     return Deps(**kwargs)
 
 
-def test_route_efficacy_sets_domain():
+async def test_route_efficacy_sets_domain():
     deps = _deps(llm=_LLM({"qwen-fast": ["efficacy"]}))
-    out = route_node(initial_state("how many models?"), deps)
+    out = await route_node(initial_state("how many models?"), deps)
     assert out["domain"] == "efficacy"
     assert out.get("status") != "clarify"
 
 
-def test_route_clarify_sets_status():
+async def test_route_clarify_sets_status():
     deps = _deps(llm=_LLM({"qwen-fast": ["clarify: which drug?"]}))
-    out = route_node(initial_state("how is it?"), deps)
+    out = await route_node(initial_state("how is it?"), deps)
     assert out["status"] == "clarify"
     assert "which drug?" in out["clarification"]
 
@@ -80,9 +80,9 @@ def test_after_route_branches():
     assert after_route(s, deps) == END
 
 
-def test_extract_genes_node():
+async def test_extract_genes_node():
     deps = _deps(llm=_LLM({"qwen-fast": ["p53, EGFR"]}))
-    out = extract_genes_node(initial_state("p53 and EGFR?"), deps)
+    out = await extract_genes_node(initial_state("p53 and EGFR?"), deps)
     assert out["extracted_genes"] == ["p53", "EGFR"]
 
 
@@ -165,9 +165,9 @@ def test_assemble_context_expression_omits_permission_note():
     assert "do not" not in ctx.lower()  # expression is not access-controlled
 
 
-def test_route_expression_sets_domain():
+async def test_route_expression_sets_domain():
     deps = _deps(llm=_LLM({"qwen-fast": ["expression"]}))
-    out = route_node(initial_state("TP53 expression?"), deps)
+    out = await route_node(initial_state("TP53 expression?"), deps)
     assert out["domain"] == "expression"
 
 
@@ -190,13 +190,13 @@ def test_retrieve_examples_node_default_is_empty():
     assert retrieve_examples_node(s, deps) == {"examples": []}
 
 
-def test_generate_sql_forwards_examples():
+async def test_generate_sql_forwards_examples():
     from db_agent.examples.model import Example
 
     captured = {}
 
     class _LLM2:
-        def complete(self, model, messages):
+        async def complete(self, model, messages):
             captured["joined"] = " ".join(m["content"] for m in messages)
             return "SELECT 1"
 
@@ -205,15 +205,15 @@ def test_generate_sql_forwards_examples():
     s = initial_state("q")
     s["context"] = "ctx"
     s["examples"] = [Example("past q", "SELECT 42", "efficacy")]
-    generate_sql_node(s, deps)
+    await generate_sql_node(s, deps)
     assert "SELECT 42" in captured["joined"]  # example reached the prompt
 
 
-def test_generate_sql_increments_attempts():
+async def test_generate_sql_increments_attempts():
     deps = _deps(llm=_LLM({"qwen-code": ["SELECT 1"]}))
     s = initial_state("q")
     s["context"] = "ctx"
-    out = generate_sql_node(s, deps)
+    out = await generate_sql_node(s, deps)
     assert out["sql"] == "SELECT 1"
     assert out["attempts"] == 1
 
@@ -317,7 +317,7 @@ def _qr_rows():
     )
 
 
-def test_analyze_node_runs_sandbox_when_sql_returned():
+async def test_analyze_node_runs_sandbox_when_sql_returned():
     analysis = QueryResult(
         columns=["m"],
         rows=[{"m": 1.5}],
@@ -335,29 +335,29 @@ def test_analyze_node_runs_sandbox_when_sql_returned():
     object.__setattr__(deps, "run_sandbox", fake_sandbox)
     s = initial_state("avg tv?")
     s["result"] = _qr_rows()
-    out = analyze_node(s, deps)
+    out = await analyze_node(s, deps)
     assert out["analysis"] is analysis
     assert "result" in out["analysis_sql"].lower()
 
 
-def test_analyze_node_none_passes_through():
+async def test_analyze_node_none_passes_through():
     deps = _deps(llm=_LLM({"qwen-code": ["NONE"]}))
     s = initial_state("q")
     s["result"] = _qr_rows()
-    assert analyze_node(s, deps) == {}
+    assert await analyze_node(s, deps) == {}
 
 
-def test_analyze_node_empty_result_skips_llm():
+async def test_analyze_node_empty_result_skips_llm():
     empty = QueryResult(
         columns=["x"], rows=[], rowcount=0, truncated=False, sql="s", elapsed_ms=0.0
     )
     deps = _deps(llm=_LLM({}))  # no scripted response -> must not be called
     s = initial_state("q")
     s["result"] = empty
-    assert analyze_node(s, deps) == {}
+    assert await analyze_node(s, deps) == {}
 
 
-def test_analyze_node_guard_error_degrades():
+async def test_analyze_node_guard_error_degrades():
     def boom(columns, rows, sql):
         raise GuardError("duckdb_error", "bad", retryable=False)
 
@@ -365,10 +365,10 @@ def test_analyze_node_guard_error_degrades():
     object.__setattr__(deps, "run_sandbox", boom)
     s = initial_state("q")
     s["result"] = _qr_rows()
-    assert analyze_node(s, deps) == {}
+    assert await analyze_node(s, deps) == {}
 
 
-def test_answer_node_uses_analysis_when_present():
+async def test_answer_node_uses_analysis_when_present():
     analysis = QueryResult(
         columns=["m"],
         rows=[{"m": 1.5}],
@@ -383,12 +383,12 @@ def test_answer_node_uses_analysis_when_present():
     s["result"] = _qr_rows()
     s["analysis"] = analysis
     s["analysis_sql"] = "SELECT avg(tv) AS m FROM result"
-    out = answer_node(s, deps)
+    out = await answer_node(s, deps)
     assert out["answer"] == "Average is 1.5."
     assert out["status"] == "answered"
 
 
-def test_answer_node_sets_answer():
+async def test_answer_node_sets_answer():
     qr = QueryResult(
         columns=["n"],
         rows=[{"n": 1}],
@@ -401,14 +401,14 @@ def test_answer_node_sets_answer():
     s = initial_state("q")
     s["secured_sql"] = "SELECT 1"
     s["result"] = qr
-    out = answer_node(s, deps)
+    out = await answer_node(s, deps)
     assert out["answer"] == "One row."
     assert out["status"] == "answered"
 
 
-def test_route_mutation_sets_domain():
+async def test_route_mutation_sets_domain():
     deps = _deps(llm=_LLM({"qwen-fast": ["mutation"]}))
-    out = route_node(initial_state("which models have a TP53 mutation?"), deps)
+    out = await route_node(initial_state("which models have a TP53 mutation?"), deps)
     assert out["domain"] == "mutation"
 
 
@@ -440,9 +440,9 @@ def test_oncokb_only_fed_for_mutation_not_other_domains():
         assert "oncokb" not in ctx
 
 
-def test_route_modeling_sets_domain():
+async def test_route_modeling_sets_domain():
     deps = _deps(llm=_LLM({"qwen-fast": ["modeling"]}))
-    out = route_node(initial_state("modeling tumor volume for model X?"), deps)
+    out = await route_node(initial_state("modeling tumor volume for model X?"), deps)
     assert out["domain"] == "modeling"
 
 
@@ -473,7 +473,7 @@ def test_assemble_context_modeling_includes_panel():
     assert "do not" in ctx.lower()  # still access-controlled
 
 
-def test_stats_node_runs_when_request_returned():
+async def test_stats_node_runs_when_request_returned():
     from db_agent.sandbox.stats.spec import StatResult
 
     stat = StatResult(test="welch_t_test", stats={"p_value": 0.01}, groups=[], caveats=[])
@@ -495,12 +495,12 @@ def test_stats_node_runs_when_request_returned():
     object.__setattr__(deps, "run_stat", fake_run_stat)
     s = initial_state("is tv different by group?")
     s["result"] = _qr_rows()
-    out = stats_node(s, deps)
+    out = await stats_node(s, deps)
     assert out["stat_result"] is stat
     assert "welch_t_test" in out["stat_request"]
 
 
-def test_stats_node_prefers_analysis_table():
+async def test_stats_node_prefers_analysis_table():
     from db_agent.sandbox.stats.spec import StatResult
 
     analysis = QueryResult(
@@ -522,28 +522,28 @@ def test_stats_node_prefers_analysis_table():
     s = initial_state("q")
     s["result"] = _qr_rows()
     s["analysis"] = analysis
-    stats_node(s, deps)
+    await stats_node(s, deps)
     assert seen["columns"] == ["grp", "val"]  # used the analysis table, not raw result
 
 
-def test_stats_node_none_passes_through():
+async def test_stats_node_none_passes_through():
     deps = _deps(llm=_LLM({"qwen-code": ["NONE"]}))
     s = initial_state("q")
     s["result"] = _qr_rows()
-    assert stats_node(s, deps) == {}
+    assert await stats_node(s, deps) == {}
 
 
-def test_stats_node_empty_table_skips_llm():
+async def test_stats_node_empty_table_skips_llm():
     empty = QueryResult(
         columns=["x"], rows=[], rowcount=0, truncated=False, sql="s", elapsed_ms=0.0
     )
     deps = _deps(llm=_LLM({}))  # no scripted response -> must not be called
     s = initial_state("q")
     s["result"] = empty
-    assert stats_node(s, deps) == {}
+    assert await stats_node(s, deps) == {}
 
 
-def test_stats_node_guard_error_degrades():
+async def test_stats_node_guard_error_degrades():
     def boom(columns, rows, req):
         raise GuardError("stat_unknown_function", "nope", retryable=False)
 
@@ -551,10 +551,10 @@ def test_stats_node_guard_error_degrades():
     object.__setattr__(deps, "run_stat", boom)
     s = initial_state("q")
     s["result"] = _qr_rows()
-    assert stats_node(s, deps) == {}
+    assert await stats_node(s, deps) == {}
 
 
-def test_answer_node_uses_stat_result_when_present():
+async def test_answer_node_uses_stat_result_when_present():
     from db_agent.sandbox.stats.spec import StatResult
 
     stat = StatResult(
@@ -569,6 +569,6 @@ def test_answer_node_uses_stat_result_when_present():
     s["analysis_sql"] = "SELECT group_id, tv FROM result"
     s["result"] = _qr_rows()
     s["stat_result"] = stat
-    out = answer_node(s, deps)
+    out = await answer_node(s, deps)
     assert out["answer"] == "Significant difference (p=0.01)."
     assert out["status"] == "answered"

@@ -13,32 +13,32 @@ class _LLM:
         self.by_model = {k: list(v) for k, v in by_model.items()}
         self.seen = []
 
-    def complete(self, model, messages):
+    async def complete(self, model, messages):
         self.seen.append((model, messages))
         return self.by_model[model].pop(0)
 
 
-def test_request_stat_returns_json_string():
+async def test_request_stat_returns_json_string():
     llm = _LLM(
         {"qwen-code": ['{"function": "welch_t_test", "params": {"value": "v", "group": "g"}}']}
     )
-    out = request_stat(
+    out = await request_stat(
         llm, SETTINGS, "is it significant?", ["g", "v"], "g, v\nctrl, 1", catalog_text()
     )
     assert "welch_t_test" in out
     assert llm.seen[0][0] == "qwen-code"
 
 
-def test_request_stat_strips_fences():
+async def test_request_stat_strips_fences():
     llm = _LLM({"qwen-code": ['```json\n{"function": "one_way_anova"}\n```']})
-    out = request_stat(llm, SETTINGS, "q", ["g", "v"], "preview", catalog_text())
+    out = await request_stat(llm, SETTINGS, "q", ["g", "v"], "preview", catalog_text())
     assert out.startswith("{")
     assert "```" not in out
 
 
-def test_request_stat_none():
+async def test_request_stat_none():
     llm = _LLM({"qwen-code": ["NONE"]})
-    assert request_stat(llm, SETTINGS, "q", ["g"], "p", catalog_text()) == "NONE"
+    assert await request_stat(llm, SETTINGS, "q", ["g"], "p", catalog_text()) == "NONE"
 
 
 def test_stat_messages_encourage_emitting_when_significance_asked():
@@ -52,7 +52,7 @@ def test_stat_messages_encourage_emitting_when_significance_asked():
     assert "p-value" in system or "p value" in system
 
 
-def test_answer_stat_formats_and_routes():
+async def test_answer_stat_formats_and_routes():
     stat = StatResult(
         test="welch_t_test",
         stats={"t": -3.5, "p_value": 0.01, "mean_difference": -7.0},
@@ -60,7 +60,9 @@ def test_answer_stat_formats_and_routes():
         caveats=["Welch's t-test.", "Result is significant at alpha=0.05 (p=0.01)."],
     )
     llm = _LLM({"qwen-main": ["The difference is significant (p=0.01)."]})
-    out = answer_stat(llm, SETTINGS, "significant?", "SELECT ...", "SELECT ... FROM result", stat)
+    out = await answer_stat(
+        llm, SETTINGS, "significant?", "SELECT ...", "SELECT ... FROM result", stat
+    )
     assert out == "The difference is significant (p=0.01)."
     assert llm.seen[0][0] == "qwen-main"
     # the prompt carried the formatted summary

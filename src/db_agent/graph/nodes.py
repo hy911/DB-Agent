@@ -7,6 +7,7 @@ nodes catch GuardError and write a transient `outcome` the routers dispatch on.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 
 from langgraph.graph import END
@@ -31,8 +32,8 @@ logger = logging.getLogger("db_agent.graph")
 _ANSWER_FALLBACK = "（自动摘要生成超时，已返回查询到的数据与所用 SQL，请直接查看下方结果。）"
 
 
-def route_node(state: AgentState, deps: Deps) -> dict:
-    res = llm_route(deps.llm, deps.settings, state["question"], deps.layer.routable_domains())
+async def route_node(state: AgentState, deps: Deps) -> dict:
+    res = await llm_route(deps.llm, deps.settings, state["question"], deps.layer.routable_domains())
     if res.domain is not None:
         return {"domain": res.domain}
     return {"clarification": res.clarification, "status": "clarify"}
@@ -46,8 +47,9 @@ def after_route(state: AgentState, deps: Deps) -> str:
     return "assemble_context"
 
 
-def extract_genes_node(state: AgentState, deps: Deps) -> dict:
-    return {"extracted_genes": llm_extract_genes(deps.llm, deps.settings, state["question"])}
+async def extract_genes_node(state: AgentState, deps: Deps) -> dict:
+    genes = await llm_extract_genes(deps.llm, deps.settings, state["question"])
+    return {"extracted_genes": genes}
 
 
 def resolve_genes_node(state: AgentState, deps: Deps) -> dict:
@@ -84,8 +86,8 @@ def retrieve_examples_node(state: AgentState, deps: Deps) -> dict:
     return {"examples": deps.retrieve_examples(state["domain"], state["question"])}
 
 
-def generate_sql_node(state: AgentState, deps: Deps) -> dict:
-    sql = llm_generate_sql(
+async def generate_sql_node(state: AgentState, deps: Deps) -> dict:
+    sql = await llm_generate_sql(
         deps.llm,
         deps.settings,
         state["question"],
@@ -132,27 +134,27 @@ def after_execute(state: AgentState) -> str:
     return {"ok": "analyze", "retry": "generate_sql", "fatal": END}[state["outcome"]]
 
 
-def analyze_node(state: AgentState, deps: Deps) -> dict:
+async def analyze_node(state: AgentState, deps: Deps) -> dict:
     result = state.get("result")
     if result is None or result.rowcount == 0:
         return {}
-    sql = llm_analyze_sql(deps.llm, deps.settings, state["question"], result)
+    sql = await llm_analyze_sql(deps.llm, deps.settings, state["question"], result)
     if not sql or sql.strip().upper() == "NONE":
         return {}
     try:
-        analysis = deps.run_sandbox(result.columns, result.rows, sql)
+        analysis = await asyncio.to_thread(deps.run_sandbox, result.columns, result.rows, sql)
     except GuardError:
         return {}  # fail-soft: analysis is additive; degrade to the raw-result answer
     return {"analysis": analysis, "analysis_sql": sql}
 
 
-def stats_node(state: AgentState, deps: Deps) -> dict:
+async def stats_node(state: AgentState, deps: Deps) -> dict:
     table = state.get("analysis")
     if table is None:
         table = state.get("result")
     if table is None or table.rowcount == 0:
         return {}
-    req = llm_request_stat(
+    req = await llm_request_stat(
         deps.llm,
         deps.settings,
         state["question"],
@@ -163,13 +165,13 @@ def stats_node(state: AgentState, deps: Deps) -> dict:
     if not req or req.strip().upper() == "NONE":
         return {}
     try:
-        stat = deps.run_stat(table.columns, table.rows, req)
+        stat = await asyncio.to_thread(deps.run_stat, table.columns, table.rows, req)
     except GuardError:
         return {}  # fail-soft: stats are additive; degrade to the descriptive answer
     return {"stat_result": stat, "stat_request": req}
 
 
-def answer_node(state: AgentState, deps: Deps) -> dict:
+async def answer_node(state: AgentState, deps: Deps) -> dict:
     # The SQL has already run and the result/SQL are on the state — they are returned
     # regardless of this step. So if the final NL-answer LLM call fails (commonly a
     # gateway 504 under load), degrade to a fallback note instead of failing the whole
@@ -177,7 +179,7 @@ def answer_node(state: AgentState, deps: Deps) -> dict:
     try:
         stat = state.get("stat_result")
         if stat is not None:
-            text = llm_answer_stat(
+            text = await llm_answer_stat(
                 deps.llm,
                 deps.settings,
                 state["question"],
@@ -188,11 +190,11 @@ def answer_node(state: AgentState, deps: Deps) -> dict:
             return {"answer": text, "status": "answered"}
         analysis = state.get("analysis")
         if analysis is not None:
-            text = llm_answer(
+            text = await llm_answer(
                 deps.llm, deps.settings, state["question"], state["analysis_sql"], analysis
             )
         else:
-            text = llm_answer(
+            text = await llm_answer(
                 deps.llm, deps.settings, state["question"], state["secured_sql"], state["result"]
             )
         return {"answer": text, "status": "answered"}

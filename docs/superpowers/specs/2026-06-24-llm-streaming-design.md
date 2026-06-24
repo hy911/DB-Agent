@@ -52,5 +52,49 @@ No usage tracking (no `stream_options`), no new dependency, no settings change.
 
 ### Out of scope (Phase 2, not built)
 
-`complete_stream() -> Iterator[str]` on the Protocol/client; `POST /query/stream`
-SSE endpoint streaming only the answer node; frontend fetch-stream consumption.
+`POST /query/stream` SSE endpoint streaming only the answer node; frontend
+fetch-stream consumption.
+
+## Phase 1b — Full-chain async (follow-up, approved)
+
+Phase 1 streamed synchronously. Follow-up: make the whole call chain async so the
+streaming LLM I/O is truly non-blocking (`litellm.acompletion(stream=True)` +
+`async for`). This also lays the groundwork for the Phase 2 SSE endpoint.
+
+### Key mechanism
+
+Under `await graph.ainvoke(state)`, LangGraph runs **sync** node functions in a
+threadpool (non-blocking) and **awaits** async node functions. So only nodes that
+do LLM I/O become `async`; pure/DB nodes stay sync and run in the executor.
+
+### Changes
+
+- `client.py`: `LLMClient.complete` Protocol and `LiteLLMClient.complete` become
+  `async def`, using `await litellm.acompletion(..., stream=True)` + `async for`.
+- `agent_llm.py`: the 7 LLM task functions (`route`, `extract_genes`,
+  `generate_sql`, `analyze_sql`, `request_stat`, `answer`, `answer_stat`) become
+  `async def` and `await client.complete(...)`. Pure helpers unchanged.
+- `nodes.py`: LLM-calling nodes (`route_node`, `extract_genes_node`,
+  `generate_sql_node`, `analyze_node`, `stats_node`, `answer_node`) become
+  `async def`. The sync `run_sandbox`/`run_stat` calls inside `analyze_node`/
+  `stats_node` are wrapped in `await asyncio.to_thread(...)`. DB-only/pure nodes
+  (`resolve_genes_node`, `assemble_context_node`, `retrieve_examples_node`,
+  `guard_node`, `execute_node`) and all routers stay sync.
+- `build.py`: `run_agent` becomes `async def` using `await graph.ainvoke(...)`.
+  No sync wrapper — the chain is async end to end. Observer call stays sync
+  (best-effort).
+- `app.py`: `query` endpoint becomes `async def` awaiting `run_agent(...)`.
+
+### Decision: no sync wrapper
+
+`run_agent` is `async def` outright. A sync wrapper would not save test churn,
+because the async chain must `await` the fake clients, so every fake `complete`
+becomes `async def` regardless.
+
+### Tests
+
+- Dev dep `pytest-asyncio` added; `asyncio_mode = "auto"` in pytest config.
+- All fake `complete` methods become `async def`.
+- Tests that call task functions or `run_agent` directly become `async def test_*`
+  and `await`. `test_api_endpoint.py` goes through the FastAPI TestClient (which
+  drives the async endpoint), so only its fake changes.

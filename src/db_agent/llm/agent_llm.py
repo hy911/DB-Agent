@@ -29,11 +29,12 @@ class RouteResult:
     clarification: str | None = None
 
 
-def route(
+async def route(
     client: LLMClient, settings: Settings, question: str, domains: list[Domain]
 ) -> RouteResult:
     valid = {d.name for d in domains}
-    text = client.complete(settings.model_fast, prompts.route_messages(question, domains)).strip()
+    raw = await client.complete(settings.model_fast, prompts.route_messages(question, domains))
+    text = raw.strip()
     low = text.lower()
     if low.startswith("clarify"):
         q = text.split(":", 1)[1].strip() if ":" in text else _CLARIFY_FALLBACK
@@ -45,14 +46,15 @@ def route(
     return RouteResult(clarification=_CLARIFY_FALLBACK)
 
 
-def extract_genes(client: LLMClient, settings: Settings, question: str) -> list[str]:
-    text = client.complete(settings.model_fast, prompts.extract_genes_messages(question)).strip()
+async def extract_genes(client: LLMClient, settings: Settings, question: str) -> list[str]:
+    raw = await client.complete(settings.model_fast, prompts.extract_genes_messages(question))
+    text = raw.strip()
     if not text or text.strip().upper() == "NONE":
         return []
     return [g.strip() for g in text.split(",") if g.strip()]
 
 
-def generate_sql(
+async def generate_sql(
     client: LLMClient,
     settings: Settings,
     question: str,
@@ -60,18 +62,21 @@ def generate_sql(
     prior_error: str | None = None,
     examples: list[Example] | None = None,
 ) -> str:
-    text = client.complete(
+    text = await client.complete(
         settings.model_sql, prompts.sql_messages(question, context, prior_error, examples)
     )
     return _strip_fences(text).strip()
 
 
-def analyze_sql(client: LLMClient, settings: Settings, question: str, result: QueryResult) -> str:
+async def analyze_sql(
+    client: LLMClient, settings: Settings, question: str, result: QueryResult
+) -> str:
     msgs = prompts.analysis_messages(question, result.columns, _rows_preview(result))
-    return _strip_fences(client.complete(settings.model_sql, msgs)).strip()
+    text = await client.complete(settings.model_sql, msgs)
+    return _strip_fences(text).strip()
 
 
-def request_stat(
+async def request_stat(
     client: LLMClient,
     settings: Settings,
     question: str,
@@ -80,10 +85,11 @@ def request_stat(
     catalog: str,
 ) -> str:
     msgs = prompts.stat_messages(question, columns, rows_preview, catalog)
-    return _strip_fences(client.complete(settings.model_sql, msgs)).strip()
+    text = await client.complete(settings.model_sql, msgs)
+    return _strip_fences(text).strip()
 
 
-def answer_stat(
+async def answer_stat(
     client: LLMClient,
     settings: Settings,
     question: str,
@@ -92,9 +98,10 @@ def answer_stat(
     stat: StatResult,
 ) -> str:
     summary = _format_stat(stat)
-    return client.complete(
+    text = await client.complete(
         settings.model_route, prompts.stat_answer_messages(question, sql, analysis_sql, summary)
-    ).strip()
+    )
+    return text.strip()
 
 
 def _format_stat(stat: StatResult) -> str:
@@ -108,7 +115,7 @@ def _format_stat(stat: StatResult) -> str:
     return "\n".join(lines)
 
 
-def answer(
+async def answer(
     client: LLMClient,
     settings: Settings,
     question: str,
@@ -116,9 +123,10 @@ def answer(
     result: QueryResult,
 ) -> str:
     preview = _rows_preview(result)
-    return client.complete(
+    text = await client.complete(
         settings.model_route, prompts.answer_messages(question, sql, preview)
-    ).strip()
+    )
+    return text.strip()
 
 
 def _strip_fences(text: str) -> str:

@@ -8,7 +8,7 @@ from db_agent.llm.client import LiteLLMClient, LLMClient
 
 
 class _FakeClient:
-    def complete(self, model: str, messages: list[dict[str, str]]) -> str:
+    async def complete(self, model: str, messages: list[dict[str, str]]) -> str:
         return "ok"
 
 
@@ -28,33 +28,38 @@ def _chunk(content):
     return types.SimpleNamespace(choices=[types.SimpleNamespace(delta=delta)])
 
 
+async def _aiter(chunks):
+    for c in chunks:
+        yield c
+
+
 def _install_fake_litellm(monkeypatch, capture):
     fake = types.ModuleType("litellm")
 
-    def completion(**kwargs):
+    async def acompletion(**kwargs):
         capture.update(kwargs)
         # Streaming: yield "SELECT 1" in pieces, then a content=None chunk
         # (role-only / finish) to exercise the accumulator's guard.
-        return iter([_chunk("SEL"), _chunk("ECT"), _chunk(" 1"), _chunk(None)])
+        return _aiter([_chunk("SEL"), _chunk("ECT"), _chunk(" 1"), _chunk(None)])
 
-    fake.completion = completion
+    fake.acompletion = acompletion
     monkeypatch.setitem(sys.modules, "litellm", fake)
 
 
-def test_client_disables_thinking_by_default(monkeypatch):
+async def test_client_disables_thinking_by_default(monkeypatch):
     capture: dict = {}
     _install_fake_litellm(monkeypatch, capture)
     client = LiteLLMClient(Settings(_env_file=None))
-    out = client.complete("qwen-code", [{"role": "user", "content": "hi"}])
+    out = await client.complete("qwen-code", [{"role": "user", "content": "hi"}])
     assert out == "SELECT 1"
     assert capture["stream"] is True
     assert capture["extra_body"] == {"chat_template_kwargs": {"enable_thinking": False}}
     assert capture["model"] == "openai/qwen-code"
 
 
-def test_client_thinking_can_be_enabled(monkeypatch):
+async def test_client_thinking_can_be_enabled(monkeypatch):
     capture: dict = {}
     _install_fake_litellm(monkeypatch, capture)
     client = LiteLLMClient(Settings(_env_file=None, llm_enable_thinking=True))
-    client.complete("qwen-main", [{"role": "user", "content": "hi"}])
+    await client.complete("qwen-main", [{"role": "user", "content": "hi"}])
     assert capture["extra_body"] == {"chat_template_kwargs": {"enable_thinking": True}}

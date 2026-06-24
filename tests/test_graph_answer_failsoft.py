@@ -15,7 +15,7 @@ class _LLM:
     def __init__(self, by_model):
         self.by_model = {k: list(v) for k, v in by_model.items()}
 
-    def complete(self, model, messages):
+    async def complete(self, model, messages):
         if model == SETTINGS.model_route:  # the answer step
             raise RuntimeError("gateway 504")
         return self.by_model[model].pop(0)
@@ -40,14 +40,16 @@ def _qr():
     )
 
 
-def test_answer_failsoft_returns_data_when_answer_llm_fails():
+async def test_answer_failsoft_returns_data_when_answer_llm_fails():
     llm = _LLM(
         {
             "qwen-fast": ["efficacy"],
             "qwen-code": ["SELECT drug_name FROM model_efficacy_info", "NONE", "NONE"],
         }
     )
-    res = run_agent("how many?", llm=llm, replica=_Replica([_qr()]), layer=LAYER, settings=SETTINGS)
+    res = await run_agent(
+        "how many?", llm=llm, replica=_Replica([_qr()]), layer=LAYER, settings=SETTINGS
+    )
     # SQL ran fine; the answer LLM 504'd — we degrade instead of raising (-> 502).
     assert res.status == "answered"
     assert res.result is not None and res.result.rowcount == 1

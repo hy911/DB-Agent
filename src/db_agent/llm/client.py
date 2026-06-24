@@ -15,7 +15,7 @@ from db_agent.config import Settings
 
 @runtime_checkable
 class LLMClient(Protocol):
-    def complete(self, model: str, messages: list[dict[str, str]]) -> str: ...
+    async def complete(self, model: str, messages: list[dict[str, str]]) -> str: ...
 
 
 class LiteLLMClient:
@@ -31,15 +31,16 @@ class LiteLLMClient:
             "chat_template_kwargs": {"enable_thinking": settings.llm_enable_thinking}
         }
 
-    def complete(self, model: str, messages: list[dict[str, str]]) -> str:
+    async def complete(self, model: str, messages: list[dict[str, str]]) -> str:
         import litellm
 
-        # Stream and accumulate. Streaming keeps chunks flowing over the gateway
-        # connection during long generations (e.g. SQL gen), so it never sits idle
-        # long enough to trip the upstream timeout (the chronic "504"). The method
-        # still returns the full joined string — callers are unchanged. See
-        # https://docs.litellm.ai/stream
-        stream = litellm.completion(
+        # Async stream + accumulate. acompletion(stream=True) yields an async
+        # iterator of chunks; streaming keeps the gateway connection alive during
+        # long generations (e.g. SQL gen) so it never sits idle long enough to trip
+        # the upstream timeout (the chronic "504"), and being async means the I/O
+        # never blocks the event loop. Still returns the full joined string —
+        # callers just await. See https://docs.litellm.ai/stream
+        stream = await litellm.acompletion(
             model=f"openai/{model}",
             api_base=self._base_url,
             api_key=self._api_key,
@@ -49,7 +50,7 @@ class LiteLLMClient:
             stream=True,
         )
         parts: list[str] = []
-        for chunk in stream:
+        async for chunk in stream:
             piece = chunk.choices[0].delta.content
             if piece:  # role-only / finish chunks carry delta.content = None
                 parts.append(piece)
