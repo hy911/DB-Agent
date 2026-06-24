@@ -42,7 +42,7 @@ def test_column_value_hints_parse():
     assert desc.columns["is_cancer_model"].values == ("cancer", "no_cancer")
     assert "PDX" in desc.columns["model_type"].values
     assert desc.columns["cancer_type"].language == "english"
-    assert desc.columns["cancer_type"].examples  # non-empty vocabulary
+    assert "Lung Carcinoma" in desc.columns["cancer_type"].values  # closed vocabulary
     assert layer.get_table("model_efficacy_info").columns["drug_name"].language == "english"
 
 

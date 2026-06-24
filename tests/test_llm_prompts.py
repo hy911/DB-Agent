@@ -16,6 +16,14 @@ def test_route_messages_lists_domains_and_clarify():
     assert "how many models?" in msgs[-1]["content"]
 
 
+def test_route_messages_routes_by_measurement_not_model_attrs():
+    system = route_messages("q", DOMAINS)[0]["content"].lower()
+    assert "expression" in system and "mutation" in system
+    # model attributes (CDX/cancer type) must not drive routing
+    assert "cdx" in system or "model type" in system
+    assert "never route on them" in system or "available in every domain" in system
+
+
 def test_sql_messages_include_context_and_question():
     msgs = sql_messages("list drugs", "TABLE model_efficacy_info(...)")
     joined = " ".join(m["content"] for m in msgs)
@@ -64,6 +72,8 @@ def test_sql_system_prompt_states_failure_avoidance_rules():
     assert "true/false" in system or "boolean" in system  # varchar-not-boolean rule
     assert "ilike" in system  # fuzzy match for off-vocabulary categories
     assert "group by" in system  # all non-aggregated columns must be grouped
+    # closed-vocabulary adherence: map to the closest listed value, don't invent
+    assert "closest" in system and "never invent" in system
 
 
 def test_answer_system_prompt_forbids_long_enumeration():

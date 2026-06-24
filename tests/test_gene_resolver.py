@@ -22,6 +22,20 @@ def test_multiple_distinct_exact_is_ambiguous():
     assert {m.symbol for m in res.candidates} == {"TP53", "Trp53"}
 
 
+def test_shared_synonym_disambiguated_by_query_casing():
+    # 'HER2' maps to human ERBB2 + mouse Erbb2; uppercase query → human.
+    human = _gm("ERBB2", via="synonym_exact", species="human")
+    mouse = _gm("Erbb2", via="synonym_exact", species="mouse")
+    up = _decide("HER2", [human, mouse], [])
+    assert up.status == "resolved" and up.symbol == "ERBB2"
+    # title-case query → mouse.
+    title = _decide("Her2", [human, mouse], [])
+    assert title.status == "resolved" and title.symbol == "Erbb2"
+    # mixed-case / no signal → stay ambiguous (safe).
+    amb = _decide("hEr2", [human, mouse], [])
+    assert amb.status == "ambiguous"
+
+
 def test_same_symbol_twice_still_resolved():
     # symbol-exact and synonym-exact both pointing at one symbol
     res = _decide("EGFR", [_gm("EGFR"), _gm("EGFR", via="synonym_exact")], [])

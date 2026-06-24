@@ -16,10 +16,10 @@ meta:
 
 # ----------- 域划分（路由用） -----------
 domains:
-  efficacy:    {label: 药效数据, hub: model_efficacy_info, access_controlled: true}
-  modeling:    {label: 建模数据, hub: modeling_attr_info,  access_controlled: true}
-  expression:  {label: 基因表达, hub: model_desc_info}
-  mutation:    {label: 突变数据, hub: model_desc_info}
+  efficacy:    {label: '药效数据(给药/TGI/肿瘤生长曲线/生存——评估药物疗效)', hub: model_efficacy_info, access_controlled: true}
+  modeling:    {label: '建模数据(模型自身的建模属性/体内PK/免疫表型FACS/病理/ELISA等实验数据)', hub: modeling_attr_info,  access_controlled: true}
+  expression:  {label: '基因表达量(某基因在模型中的表达高低，log2tpm；如"HER2高表达""EGFR表达量")', hub: model_desc_info}
+  mutation:    {label: '基因突变(某基因在模型中的突变/变异情况；如"EGFR突变""Trp53突变")', hub: model_desc_info}
   reference:   {label: 字典/参考, hub: null}
 
 # ----------- 表定义 -----------
@@ -40,15 +40,21 @@ tables:
       model_name:   {type: varchar, desc: '模型名称(自由文本，存在大量同名/变体，如 CT26、CT26-PD-L1...)。仅用于按名称查询；"模型ID/编号"类提问禁止使用本列'}
       cancer_type:
         type: varchar
-        desc: 癌种/疾病类型(英文组织学名，含少量非肿瘤疾病模型)
+        desc: >-
+          癌种/疾病类型(英文组织学名)。这是完整的封闭取值集(见 values)，按组织学粗分、不区分
+          亚型：肺癌的 NSCLC/SCLC/非小细胞肺癌/腺癌 全部归为 'Lung Carcinoma'。提问中的中文癌种、
+          英文同义词或更细的亚型，必须映射到 values 里最接近的一项；切勿臆造 'non-small cell lung'
+          这类列表外的描述性字符串(库内不存在，必返回 0 行)。需要按亚型细分时用 cancer_subtype_short_names。
         language: english
-        examples: ['Lung Carcinoma', 'Melanoma', 'Breast Carcinoma', 'Colorectal Carcinoma',
-          'Gastric Carcinoma', 'Liver Carcinoma', 'Pancreatic Carcinoma', 'Ovarian Carcinoma',
-          'Lymphoma', 'Leukemia', 'Myeloma', 'Neuroblastoma', 'Sarcoma', 'Kidney Carcinoma',
-          'Prostatic Carcinoma', 'Cervical Carcinoma', 'Esophageal Carcinoma',
-          'Head and Neck Carcinoma', 'Nasopharyngeal Carcinoma', 'Bladder Carcinoma',
-          'Mesothelioma', 'Thyroid Carcinoma', 'Non-Cancerous']
-      cancer_subtype_short_names: {type: varchar, desc: 癌种亚型简称}
+        values: [Lung Carcinoma, Breast Carcinoma, Colorectal Carcinoma, Gastric Carcinoma,
+          Liver Carcinoma, Pancreatic Carcinoma, Ovarian Carcinoma, Esophageal Carcinoma,
+          Cervical Carcinoma, Uterus Carcinoma, Vulvar Carcinoma, Prostatic Carcinoma,
+          Kidney Carcinoma, Bladder Carcinoma, Thyroid Carcinoma, Nasopharyngeal Carcinoma,
+          Head and Neck Carcinoma, Adenoid Cystic Carcinoma, Epidermoid Carcinoma,
+          Cholangiocarcinoma, Lymphoma, Leukemia, Myeloma, Plasmacytoma, Melanoma,
+          Neuroblastoma, Sarcoma, Fibrosarcoma, Mesothelioma, Bone Cancer, Brain Tumor,
+          Leydig Cell Tumor, Choriocarcinoma, Non-Cancerous]
+      cancer_subtype_short_names: {type: varchar, desc: '癌种亚型简称(短码，如 Lung Carcinoma 对应 LUC)'}
       msi_status:   {type: varchar, desc: MSI 微卫星状态}
       rnaseq_id:    {type: varchar, desc: 关联的 RNA-seq 编号}
       ccle_line:    {type: varchar, desc: 对应 CCLE 细胞系}
@@ -307,14 +313,14 @@ tables:
 
   modeling_panel_data:
     domain: modeling
-    desc: 建模-panel检测(模型级，无实验分组)
+    desc: 建模-免疫表型/流式panel检测(模型级)。检测项是免疫细胞群/TME标志(如 hCD45+%、Treg、NK、PD-1+/CD8+)，不含基因表达量；基因高/低表达请用 expression 域的 model_ccle_expression_data
     access_via: modeling_attr_info
     join_to_hub: [model_uuid, model_no]
     columns:
       model_uuid:     {type: varchar, desc: 模型spine键}
       model_no:       {type: varchar, desc: 建模编号(枢纽连接键)}
       panel:          {type: varchar, desc: 检测panel}
-      detection_item: {type: varchar, desc: 检测项}
+      detection_item: {type: varchar, desc: '检测项(免疫表型/流式指标，如 hCD45+%、Treg/CD4+T%、NK/hCD45+%；非基因，勿在此找 HER2/EGFR 等基因)'}
       update_date:    {type: date, desc: 更新日期}
 
   gene_info:

@@ -240,7 +240,7 @@ def _render_column(c) -> str:  # noqa: ANN001 - semantic.model.Column, kept loos
     base = f"{c.name} ({c.desc})" if c.desc else c.name
     hints: list[str] = []
     if c.values:
-        hints.append("values: " + "|".join(c.values))
+        hints.append("one of: " + "|".join(c.values))
     if c.examples:
         hints.append("e.g. " + ", ".join(c.examples))
     if c.language:

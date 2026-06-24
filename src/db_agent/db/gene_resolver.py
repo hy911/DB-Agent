@@ -31,11 +31,36 @@ class GeneResolution:
     candidates: list[GeneMatch]
 
 
+def _species_from_casing(query: str) -> str | None:
+    """Infer the intended species from the query's own casing.
+
+    This DB encodes species in symbol casing (human upper EGFR, mouse title-case
+    Egfr). A shared synonym like 'HER2' maps to BOTH species, so case-sensitive
+    matching alone can't split them — but the *query's* casing carries the same
+    signal: all-uppercase → human, title-case → mouse. Anything else → no signal.
+    """
+    letters = [c for c in query if c.isalpha()]
+    if not letters:
+        return None
+    if all(c.isupper() for c in letters):
+        return "human"
+    if letters[0].isupper() and all(c.islower() for c in letters[1:]):
+        return "mouse"
+    return None
+
+
 def _decide(query: str, exact: list[GeneMatch], fuzzy: list[GeneMatch]) -> GeneResolution:
     distinct = {m.symbol for m in exact}
     if len(distinct) == 1:
         return GeneResolution(query, "resolved", next(iter(distinct)), list(exact))
     if len(distinct) > 1:
+        # A synonym shared across species (e.g. 'HER2' → human ERBB2 + mouse Erbb2):
+        # disambiguate by the query's casing before falling back to a clarify.
+        species = _species_from_casing(query)
+        if species is not None:
+            narrowed = [m for m in exact if m.species == species]
+            if len({m.symbol for m in narrowed}) == 1:
+                return GeneResolution(query, "resolved", narrowed[0].symbol, narrowed)
         return GeneResolution(query, "ambiguous", None, list(exact))
     if fuzzy:
         ranked = sorted(fuzzy, key=lambda m: m.score, reverse=True)
