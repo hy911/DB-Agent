@@ -50,6 +50,25 @@ def test_answer_messages_include_sql_and_preview():
     assert "(0 rows)" in joined
 
 
+def test_answer_messages_states_authoritative_count():
+    msgs = answer_messages("list models", "SELECT ...", "a\nb", rowcount=95, truncated=False)
+    joined = " ".join(m["content"] for m in msgs)
+    assert "95" in joined
+    assert "authoritative" in joined.lower()
+
+
+def test_answer_messages_count_phrasing_when_truncated():
+    msgs = answer_messages("list models", "SELECT ...", "a\nb", rowcount=1000, truncated=True)
+    joined = " ".join(m["content"] for m in msgs)
+    assert "at least 1000" in joined
+
+
+def test_answer_system_uses_given_count_and_matches_language():
+    system = answer_messages("q", "s", "(0 rows)")[0]["content"].lower()
+    assert "authoritative" in system  # must use the given count, not its own
+    assert "same language" in system  # answer in the question's language
+
+
 def test_extract_genes_messages_include_question():
     from db_agent.llm.prompts import extract_genes_messages
 

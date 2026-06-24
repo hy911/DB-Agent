@@ -125,7 +125,8 @@ async def answer(
 ) -> str:
     preview = _rows_preview(result)
     text = await client.complete(
-        settings.model_route, prompts.answer_messages(question, sql, preview)
+        settings.model_route,
+        prompts.answer_messages(question, sql, preview, result.rowcount, result.truncated),
     )
     return text.strip()
 
@@ -140,7 +141,8 @@ async def answer_stream(
     """Token-yielding twin of `answer` — same prompt/model, streamed for live display."""
     preview = _rows_preview(result)
     async for piece in client.complete_stream(
-        settings.model_route, prompts.answer_messages(question, sql, preview)
+        settings.model_route,
+        prompts.answer_messages(question, sql, preview, result.rowcount, result.truncated),
     ):
         yield piece
 

@@ -41,11 +41,15 @@ _SQL_SYSTEM = (
 
 _ANSWER_SYSTEM = (
     "You answer the user's question in natural language using the SQL result "
-    "rows. Be concise and factual. If there are no rows, say plainly that no "
-    "matching data was found. Do NOT enumerate a long list item by item: when "
-    "there are many rows or a column holds a long list, give the total count and "
-    "a few representative examples, and note that the full result is shown in the "
-    "table below — never reproduce hundreds of values in prose."
+    "rows. Be concise and factual. Reply in the same language as the user's "
+    "question. If there are no rows, say plainly that no matching data was found. "
+    "When you state how many results there are, use EXACTLY the authoritative row "
+    "count given to you — never recount the preview rows, estimate, or merge/"
+    "de-duplicate variants on your own; the preview may show only a sample. "
+    "Do NOT enumerate a long list item by item: when there are many rows or a "
+    "column holds a long list, give that authoritative count and a few "
+    "representative examples, and note that the full result is shown in the table "
+    "below — never reproduce hundreds of values in prose."
 )
 
 
@@ -185,8 +189,28 @@ def stat_answer_messages(
     ]
 
 
-def answer_messages(question: str, sql: str, rows_preview: str) -> list[dict[str, str]]:
-    user = f"Question: {question}\n\nSQL run:\n{sql}\n\nResult rows:\n{rows_preview}"
+def answer_messages(
+    question: str,
+    sql: str,
+    rows_preview: str,
+    rowcount: int | None = None,
+    truncated: bool = False,
+) -> list[dict[str, str]]:
+    count_line = ""
+    if rowcount is not None:
+        if truncated:
+            count_line = (
+                f"\n\nAuthoritative total rows = {rowcount} (capped by LIMIT). Report it "
+                f"as a lower bound ('at least {rowcount}'). The rows below are only a "
+                f"preview sample."
+            )
+        else:
+            count_line = (
+                f"\n\nAuthoritative total rows = {rowcount}. Use this exact number "
+                f"verbatim when stating how many results there are; do not recount or "
+                f"de-duplicate. The rows below may be a preview sample, not the full set."
+            )
+    user = f"Question: {question}\n\nSQL run:\n{sql}{count_line}\n\nResult rows:\n{rows_preview}"
     return [
         {"role": "system", "content": _ANSWER_SYSTEM},
         {"role": "user", "content": user},
