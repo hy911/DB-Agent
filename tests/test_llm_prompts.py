@@ -58,6 +58,31 @@ def test_sql_system_prompt_is_domain_neutral():
     assert "select" in system  # still instructs a read-only SELECT
 
 
+def test_sql_system_prompt_states_failure_avoidance_rules():
+    system = sql_messages("q", "ctx")[0]["content"].lower()
+    assert "alias" in system  # qualify columns to avoid ambiguity
+    assert "true/false" in system or "boolean" in system  # varchar-not-boolean rule
+    assert "ilike" in system  # fuzzy match for off-vocabulary categories
+    assert "group by" in system  # all non-aggregated columns must be grouped
+
+
+def test_answer_system_prompt_forbids_long_enumeration():
+    from db_agent.llm.prompts import answer_messages
+
+    system = answer_messages("q", "s", "(0 rows)")[0]["content"].lower()
+    assert "enumerate" in system or "list" in system
+    assert "table" in system  # points the user to the table for the full result
+
+
+def test_extract_genes_prompt_excludes_model_names():
+    from db_agent.llm.prompts import extract_genes_messages
+
+    system = extract_genes_messages("EGFR in MDA-MB-468?")[0]["content"]
+    low = system.lower()
+    assert "pbmc" in low  # explicitly names model-identifier patterns to skip
+    assert "not genes" in low or "not a gene" in low
+
+
 def test_analysis_messages_include_columns_and_question():
     from db_agent.llm.prompts import analysis_messages
 

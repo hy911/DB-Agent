@@ -62,6 +62,9 @@ def _parse(raw: dict) -> SemanticLayer:
                 type=(col or {}).get("type"),
                 desc=(col or {}).get("desc"),
                 unique=bool((col or {}).get("unique", False)),
+                values=tuple((col or {}).get("values") or ()),
+                examples=tuple((col or {}).get("examples") or ()),
+                language=(col or {}).get("language"),
             )
             for col_name, col in (t.get("columns") or {}).items()
         }

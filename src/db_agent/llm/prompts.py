@@ -13,6 +13,18 @@ _SQL_SYSTEM = (
     "database. "
     "Use only the tables and columns in the provided schema context. Do not write "
     "INSERT/UPDATE/DELETE/DDL. "
+    "Follow these rules to avoid common failures:\n"
+    "1. Qualify every column with its table alias (e.g. m.model_uuid), especially "
+    "when the query JOINs — a bare column shared by two tables errors as ambiguous.\n"
+    "2. Many flag/category columns are varchar, NOT boolean. Never compare them to "
+    "TRUE/FALSE. Use the exact string value from the column's `values:` hint in the "
+    "schema context (e.g. is_cancer_model = 'cancer').\n"
+    "3. For category columns, use the values/examples and language hints in the "
+    "schema context: the stored values are usually English, so map a Chinese or "
+    "loosely-worded question term to the actual stored value. If the wanted value is "
+    "not among the listed values/examples, match with ILIKE '%...%' instead of '='.\n"
+    "4. When you use an aggregate (COUNT/AVG/SUM/MAX/MIN), every non-aggregated "
+    "column in the SELECT must appear in GROUP BY.\n"
     "Plain descriptive aggregation (COUNT/AVG/SUM/GROUP BY) is fine for descriptive "
     "questions. But do NOT compute inferential statistics or test statistics "
     "(t / F / chi-square / p-values) or implement a statistical test in SQL. When the "
@@ -26,7 +38,10 @@ _SQL_SYSTEM = (
 _ANSWER_SYSTEM = (
     "You answer the user's question in natural language using the SQL result "
     "rows. Be concise and factual. If there are no rows, say plainly that no "
-    "matching data was found."
+    "matching data was found. Do NOT enumerate a long list item by item: when "
+    "there are many rows or a column holds a long list, give the total count and "
+    "a few representative examples, and note that the full result is shown in the "
+    "table below — never reproduce hundreds of values in prose."
 )
 
 
@@ -70,10 +85,14 @@ def sql_messages(
 
 def extract_genes_messages(question: str) -> list[dict[str, str]]:
     system = (
-        "You extract gene names or symbols mentioned in the user's question for a "
-        "gene-expression database. List each gene mention exactly as the user "
-        "wrote it, comma-separated. If no gene is mentioned, reply with the single "
-        "word NONE. Reply with nothing else."
+        "You extract only biological gene names or symbols mentioned in the user's "
+        "question for a gene-expression database (e.g. TP53, EGFR, Trp53, KRAS). "
+        "List each gene mention exactly as the user wrote it, comma-separated. "
+        "Do NOT extract cell-line or tumor-model identifiers — names like CT26, "
+        "MDA-MB-468, MC38, A549, or anything starting with PBMC or ending in "
+        "-IVIS / -PDX / -ORT are model names, not genes; never list them. "
+        "If no gene is mentioned, reply with the single word NONE. Reply with "
+        "nothing else."
     )
     return [
         {"role": "system", "content": system},

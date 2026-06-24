@@ -55,23 +55,29 @@ async def extract_genes_node(state: AgentState, deps: Deps) -> dict:
 
 def resolve_genes_node(state: AgentState, deps: Deps) -> dict:
     resolved: dict[str, str] = {}
+    unknown: list[str] = []
     for name in state["extracted_genes"]:
         res = deps.resolve_gene(deps.replica, name)
         if res.status == "resolved":
             resolved[name] = res.symbol
         elif res.status == "ambiguous":
+            # A genuine gene typo fuzzy-matching several real genes — worth asking.
             cands = ", ".join(sorted({m.symbol for m in res.candidates})[:5])
             return {
                 "clarification": f"The gene '{name}' is ambiguous — did you mean one of: {cands}?",
                 "status": "clarify",
             }
         else:  # unknown
-            return {
-                "clarification": (
-                    f"I couldn't find a gene matching '{name}'. Please check the name."
-                ),
-                "status": "clarify",
-            }
+            unknown.append(name)
+    # A model/cell-line name mis-extracted as a gene (e.g. 'MDA-MB-468') resolves to
+    # nothing. Don't derail a query that named a real gene too — drop the stray term
+    # and let SQL use it as an ordinary filter. Only clarify when *no* gene resolved.
+    if unknown and not resolved:
+        names = ", ".join(f"'{n}'" for n in unknown)
+        return {
+            "clarification": f"I couldn't find a gene matching {names}. Please check the name.",
+            "status": "clarify",
+        }
     return {"resolved_genes": resolved}
 
 
@@ -223,6 +229,25 @@ def _on_guard_error(state: AgentState, deps: Deps, e: GuardError) -> dict:
     return {"outcome": "retry", "last_error": msg}
 
 
+def _render_column(c) -> str:  # noqa: ANN001 - semantic.model.Column, kept loose to avoid import cycle churn
+    """One column line for sql-gen context: name (desc) + value hints when known.
+
+    Value hints turn 0-row guesses into hits: a closed `values` enum (e.g.
+    is_cancer_model: cancer|no_cancer), an open `examples` vocabulary (e.g. the
+    cancer_type histology names), and the stored-value `language` so the model
+    maps a Chinese question term to the English value actually stored.
+    """
+    base = f"{c.name} ({c.desc})" if c.desc else c.name
+    hints: list[str] = []
+    if c.values:
+        hints.append("values: " + "|".join(c.values))
+    if c.examples:
+        hints.append("e.g. " + ", ".join(c.examples))
+    if c.language:
+        hints.append(f"stored in {c.language}")
+    return f"{base} [{'; '.join(hints)}]" if hints else base
+
+
 def _render_context(deps: Deps, domain: str, resolved_genes: dict[str, str]) -> str:
     """Render the domain's schema for sql-gen: columns with descriptions, plus —
     only for an access-controlled domain — a note that the permission columns are
@@ -230,7 +255,7 @@ def _render_context(deps: Deps, domain: str, resolved_genes: dict[str, str]) -> 
     tables = deps.layer.tables_in_domain(domain) + deps.layer.reference_tables()
     lines = []
     for t in tables:
-        cols = ", ".join(f"{c.name} ({c.desc})" if c.desc else c.name for c in t.columns.values())
+        cols = ", ".join(_render_column(c) for c in t.columns.values())
         header = f"{t.name}: {cols}" if t.desc is None else f"{t.name} — {t.desc}: {cols}"
         lines.append(header)
     dom = deps.layer.get_domain(domain)

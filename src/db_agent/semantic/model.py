@@ -16,6 +16,9 @@ class Column:
     type: str | None = None
     desc: str | None = None
     unique: bool = False
+    values: tuple[str, ...] = ()  # closed enum of stored values, if known
+    examples: tuple[str, ...] = ()  # sample values for an open vocabulary
+    language: str | None = None  # english | chinese | mixed — language of stored values
 
 
 @dataclass(frozen=True)

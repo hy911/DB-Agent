@@ -36,6 +36,16 @@ def test_efficacy_info_is_access_controlled_hub():
     assert hub.has_column("for_bd")
 
 
+def test_column_value_hints_parse():
+    layer = load_semantic_layer(YAML_PATH)
+    desc = layer.get_table("model_desc_info")
+    assert desc.columns["is_cancer_model"].values == ("cancer", "no_cancer")
+    assert "PDX" in desc.columns["model_type"].values
+    assert desc.columns["cancer_type"].language == "english"
+    assert desc.columns["cancer_type"].examples  # non-empty vocabulary
+    assert layer.get_table("model_efficacy_info").columns["drug_name"].language == "english"
+
+
 def test_validation_rejects_missing_join_key(tmp_path):
     bad = tmp_path / "bad.yaml"
     bad.write_text(

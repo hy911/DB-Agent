@@ -173,12 +173,37 @@ def _strip_fences(text: str) -> str:
     return t
 
 
-def _rows_preview(result: QueryResult, limit: int = 20) -> str:
+def _rows_preview(
+    result: QueryResult,
+    limit: int = 20,
+    *,
+    max_cell: int = 200,
+    max_chars: int = 2000,
+) -> str:
+    """Compact preview of a result for an LLM prompt.
+
+    Bounded three ways so a wide single row (e.g. ARRAY_AGG of 1000+ names) can't
+    blow up the prompt and time out the answer step: each cell is clipped to
+    ``max_cell`` chars, and rows are added only while under the ``max_chars``
+    budget (on top of the ``limit`` row cap).
+    """
     if result.rowcount == 0:
         return "(0 rows)"
+
+    def cell(value: object) -> str:
+        s = str(value)
+        return s if len(s) <= max_cell else s[:max_cell] + "…"
+
     lines = [", ".join(result.columns)]
+    used = len(lines[0])
+    shown = 0
     for row in result.rows[:limit]:
-        lines.append(", ".join(str(row.get(c)) for c in result.columns))
-    if result.rowcount > limit:
+        line = ", ".join(cell(row.get(c)) for c in result.columns)
+        if shown and used + len(line) > max_chars:
+            break
+        lines.append(line)
+        used += len(line)
+        shown += 1
+    if shown < result.rowcount:
         lines.append(f"... ({result.rowcount} rows total)")
     return "\n".join(lines)

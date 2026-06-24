@@ -123,6 +123,33 @@ def test_resolve_genes_node_ambiguous_clarifies():
     assert "TP53" in out["clarification"] and "Trp53" in out["clarification"]
 
 
+def test_resolve_genes_node_drops_unknown_when_a_gene_resolves():
+    # A model name mis-extracted alongside a real gene must not derail the query.
+    def fake_resolver(replica, name):
+        if name == "EGFR":
+            return GeneResolution(name, "resolved", "EGFR", [GeneMatch("EGFR", "human", "x", 1.0)])
+        return GeneResolution(name, "unknown", None, [])
+
+    deps = _deps(resolve_gene=fake_resolver)
+    s = initial_state("q")
+    s["extracted_genes"] = ["EGFR", "MDA-MB-468"]
+    out = resolve_genes_node(s, deps)
+    assert out["resolved_genes"] == {"EGFR": "EGFR"}
+    assert "status" not in out  # no clarify — stray term dropped
+
+
+def test_resolve_genes_node_all_unknown_clarifies():
+    def fake_resolver(replica, name):
+        return GeneResolution(name, "unknown", None, [])
+
+    deps = _deps(resolve_gene=fake_resolver)
+    s = initial_state("q")
+    s["extracted_genes"] = ["MDA-MB-468"]
+    out = resolve_genes_node(s, deps)
+    assert out["status"] == "clarify"
+    assert "MDA-MB-468" in out["clarification"]
+
+
 def test_after_resolve_branches():
     s = initial_state("q")
     assert after_resolve(s) == "assemble_context"
@@ -157,6 +184,16 @@ def test_assemble_context_efficacy_has_permission_note():
     assert "药物名称" in ctx  # column description rendered
     assert "for_bd" in ctx
     assert "do not" in ctx.lower()  # permission note present (access-controlled)
+
+
+def test_assemble_context_renders_value_hints():
+    deps = _deps()
+    s = initial_state("q")
+    s["domain"] = "modeling"  # model_desc_info (reference) is always in context
+    ctx = assemble_context_node(s, deps)["context"]
+    assert "cancer|no_cancer" in ctx  # closed enum hint for is_cancer_model
+    assert "stored in english" in ctx  # cancer_type language hint
+    assert "Melanoma" in ctx  # cancer_type vocabulary example
 
 
 def test_assemble_context_expression_omits_permission_note():

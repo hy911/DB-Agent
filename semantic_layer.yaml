@@ -32,15 +32,30 @@ tables:
     columns:
       model_uuid:   {type: varchar, desc: 模型唯一标识(全库连接主键，内部UUID，不对用户暴露)}
       model_id:     {type: varchar, unique: true, desc: '模型业务编号(唯一)。凡用户以"模型ID/model id/模型编号"指代某模型时，一律用此列精确匹配检索，不要用 model_name'}
-      model_type:   {type: varchar, desc: 模型类型(配合 second_model_type 判定)}
-      second_model_type: {type: varchar, desc: 次级模型类型}
+      model_type:
+        type: varchar
+        desc: 模型类型(配合 second_model_type 判定)；PDX/CDX 等
+        values: [PDX, CDX, CDA, HISCDX, HISPDX, IMID, FB]
+      second_model_type: {type: varchar, desc: '次级模型类型(注意：库内值带尾随空格，匹配请用 LIKE/TRIM，优先改用 model_type)'}
       model_name:   {type: varchar, desc: '模型名称(自由文本，存在大量同名/变体，如 CT26、CT26-PD-L1...)。仅用于按名称查询；"模型ID/编号"类提问禁止使用本列'}
-      cancer_type:  {type: varchar, desc: 癌种}
+      cancer_type:
+        type: varchar
+        desc: 癌种/疾病类型(英文组织学名，含少量非肿瘤疾病模型)
+        language: english
+        examples: ['Lung Carcinoma', 'Melanoma', 'Breast Carcinoma', 'Colorectal Carcinoma',
+          'Gastric Carcinoma', 'Liver Carcinoma', 'Pancreatic Carcinoma', 'Ovarian Carcinoma',
+          'Lymphoma', 'Leukemia', 'Myeloma', 'Neuroblastoma', 'Sarcoma', 'Kidney Carcinoma',
+          'Prostatic Carcinoma', 'Cervical Carcinoma', 'Esophageal Carcinoma',
+          'Head and Neck Carcinoma', 'Nasopharyngeal Carcinoma', 'Bladder Carcinoma',
+          'Mesothelioma', 'Thyroid Carcinoma', 'Non-Cancerous']
       cancer_subtype_short_names: {type: varchar, desc: 癌种亚型简称}
       msi_status:   {type: varchar, desc: MSI 微卫星状态}
       rnaseq_id:    {type: varchar, desc: 关联的 RNA-seq 编号}
       ccle_line:    {type: varchar, desc: 对应 CCLE 细胞系}
-      is_cancer_model: {type: varchar, desc: 是否肿瘤模型}
+      is_cancer_model:
+        type: varchar
+        desc: '是否肿瘤模型(varchar，非布尔)：cancer=肿瘤模型, no_cancer=非肿瘤/疾病模型。统计"肿瘤/癌症模型"时用 = ''cancer'''
+        values: [cancer, no_cancer]
 
   model_rnaseq_mapping:
     domain: reference
@@ -60,7 +75,7 @@ tables:
       model_uuid:   {type: varchar, desc: 关联 model_desc_info}
       efficacy_num: {type: varchar, desc: 药效实验编号(明细表连接键)}
       group_id:     {type: varchar, desc: 实验分组(明细表连接键)}
-      drug_name:    {type: varchar, desc: 药物名称}
+      drug_name:    {type: varchar, desc: '药物名称(英文为主，大小写不一，如 Sorafenib/Cisplatin/Vehicle)。中文药名需转英文；不确定大小写或别名时用 ILIKE 模糊匹配', language: english}
       drug_dosage:  {type: varchar, desc: 给药剂量}
       drug_route:   {type: varchar, desc: 给药途径}
       drug_schedule: {type: varchar, desc: 给药方案}
@@ -83,9 +98,9 @@ tables:
       group_id:     {type: varchar}
       animal_id:    {type: varchar, desc: 动物编号}
       days:         {type: integer, desc: 给药后天数}
-      tumor_volume: {type: decimal, desc: 单只动物瘤体积}
-      avg:          {type: decimal, desc: 组内均值}
-      sd:           {type: decimal, desc: 组内标准差}
+      tumor_volume: {type: decimal, desc: '单只动物瘤体积(本表实际数据列，按动物×天)。算瘤体积/增长一律用此列并自行聚合(如 AVG/MAX)'}
+      avg:          {type: decimal, desc: '组内均值(全表为空，勿用：对其做 AVG/MAX 只会得到 NULL，改用 tumor_volume)'}
+      sd:           {type: decimal, desc: 组内标准差(多为空，勿依赖)}
 
   model_efficacy_tgi_tv_data:
     domain: efficacy
@@ -333,4 +348,4 @@ relationships:
 # ----------- 确定性查找工具(不交给LLM猜) -----------
 lookup_tools:
   resolve_gene: {source: [gene_synonyms.synonym, gene_info.Symbol], output: gene_info.Symbol, method: 精确(大小写敏感)+pg_trgm模糊}
-  resolve_cancer_type: {source: cancer_type_short_names, output: model_desc_info.cancer_type}
+  # cancer_type 词表已通过 schema context 的 examples 直接注入，无需独立 lookup 表

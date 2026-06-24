@@ -105,6 +105,35 @@ async def test_analyze_sql_none_passthrough():
     assert await analyze_sql(_ScriptedClient("NONE"), SETTINGS, "q", qr) == "NONE"
 
 
+def test_rows_preview_clips_wide_cell_and_budget():
+    from db_agent.llm.agent_llm import _rows_preview
+
+    big_list = ", ".join(f"model{i}" for i in range(2000))  # one huge ARRAY_AGG-style cell
+    qr = QueryResult(
+        columns=["names"],
+        rows=[{"names": big_list}],
+        rowcount=1,
+        truncated=False,
+        sql="s",
+        elapsed_ms=1.0,
+    )
+    out = _rows_preview(qr)
+    assert "…" in out  # the wide cell was clipped
+    assert len(out) < 500  # nowhere near the raw ~13k-char cell
+
+
+def test_rows_preview_caps_rows_by_char_budget():
+    from db_agent.llm.agent_llm import _rows_preview
+
+    rows = [{"v": "x" * 150} for _ in range(50)]
+    qr = QueryResult(
+        columns=["v"], rows=rows, rowcount=50, truncated=False, sql="s", elapsed_ms=1.0
+    )
+    out = _rows_preview(qr, max_chars=600)
+    assert "rows total" in out  # stopped early and reported the true total
+    assert out.count("\n") < 50  # fewer than all 50 rows rendered
+
+
 async def test_answer_uses_model_route_and_passes_through():
     c = _ScriptedClient("There are 3 models.")
     res = QueryResult(
