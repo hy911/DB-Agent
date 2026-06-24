@@ -217,6 +217,17 @@ uv run ruff check src tests && uv run ruff format src tests
 
 # Equivalent without uv (the venv python directly):
 .venv/Scripts/python.exe -m pytest        # Windows
+
+# Inspect real column values (read-only) when the LLM keeps guessing wrong:
+#   ReadReplica(Settings()).fetch("SELECT DISTINCT col, count(*) ... GROUP BY 1")
+# via .venv/Scripts/python.exe. NOTE: fetch() is parameterized, so a literal % in
+# an ILIKE must be escaped as %% (psycopg placeholder gotcha).
+#
+# Live end-to-end replay of a question (hits the gateway):
+#   await run_agent(q, llm=LiteLLMClient(s), replica=ReadReplica(s),
+#       layer=load_semantic_layer(s.semantic_layer_path), settings=s)
+# AgentResult fields: status / sql / result / answer / clarification / error
+# (there is no `.domain`). Guard with asyncio.wait_for.
 ```
 
 Note: modules still keep `from __future__ import annotations` and ruff stays on
@@ -225,6 +236,24 @@ unless 3.11 support is explicitly dropped.
 
 ## Gotchas
 
+- **Column value semantics live in `semantic_layer.yaml`** via per-column
+  `values:` (closed enum) / `examples:` (open vocab) / `language:` (en/zh). The
+  loader parses them; `graph/nodes.py:_render_column` renders them into sql-gen
+  context as `[one of: …]` / `[e.g. …]` / `[stored in …]`. When the LLM guesses a
+  wrong stored value (→ 0 rows), document it HERE, not in the prompt. Known real
+  values: `is_cancer_model` ∈ {cancer, no_cancer} (NOT T/true); `cancer_type` is
+  coarse English histology (`Lung Carcinoma`, no NSCLC/SCLC — subtype is in
+  `cancer_subtype_short_names` as short codes like `LUC`); `second_model_type`
+  has trailing spaces.
+- **Growth-curve `avg`/`sd` columns are 100% NULL** (both the efficacy and
+  modeling variants). Aggregate `tumor_volume` and compute the mean yourself;
+  never `MAX(avg)`.
+- **Domain routing keys on the *measurement* the question needs** (expression /
+  mutation / efficacy / modeling), NOT on model attributes — `model_type`,
+  `cancer_type`, `model_name` sit on the shared `model_desc_info` spine and are
+  available in every domain (so "HER2-high CDX models" is expression, not
+  modeling). `modeling_panel_data.detection_item` is a flow-cytometry/immune
+  panel, not gene expression.
 - **sqlglot 30.x stores `FROM` under the `from_` arg key** (older versions used
   `from`). When walking a SELECT's direct sources, check both keys.
 - A domain may be declared under `domains:` with no tables yet — a forward
