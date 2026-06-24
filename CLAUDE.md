@@ -243,8 +243,15 @@ unless 3.11 support is explicitly dropped.
   wrong stored value (→ 0 rows), document it HERE, not in the prompt. Known real
   values: `is_cancer_model` ∈ {cancer, no_cancer} (NOT T/true); `cancer_type` is
   coarse English histology (`Lung Carcinoma`, no NSCLC/SCLC — subtype is in
-  `cancer_subtype_short_names` as short codes like `LUC`); `second_model_type`
-  has trailing spaces.
+  `cancer_subtype_short_names` as short codes like `LUC`). `model_type` is the
+  clean coarse enum (PDX/CDX/CDA/HISCDX/HISPDX/IMID/FB); `second_model_type`
+  refines it with variant suffixes (CDX-IVIS/-ORT/PBMCCDX…) AND trailing spaces,
+  so "CDX models" via `second_model_type LIKE 'CDX%'` returns MORE than
+  `model_type='CDX'` (a real cause of differing result counts).
+- **The NL answer's count comes from `result.rowcount`, not the model.** The
+  answer LLM only sees a *truncated* row preview, so it must never recount or
+  de-duplicate — `answer_messages` passes the authoritative `rowcount`/`truncated`
+  and the prompt says to state it verbatim (it answers in the question's language).
 - **Growth-curve `avg`/`sd` columns are 100% NULL** (both the efficacy and
   modeling variants). Aggregate `tumor_volume` and compute the mean yourself;
   never `MAX(avg)`.
