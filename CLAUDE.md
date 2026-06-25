@@ -25,10 +25,11 @@ type hints + dataclasses, keep it simple — no over-engineering.
 
 Architecture (already agreed, build to these):
 
-1. **Domain routing first.** A light node decides the domain
-   (efficacy / modeling / expression / mutation / reference), then only that
-   domain's tables + the `model_desc_info` spine are fed into SQL-gen context.
-   No naive schema RAG.
+1. **Domain routing first.** Routing (in `run_agent`, NOT a graph node) picks
+   every applicable domain. One domain → full pipeline; ≥2 (ambiguous) → fan out,
+   querying each and returning labeled sections rather than asking which to use.
+   Only that/those domains' tables + the `model_desc_info` spine feed SQL-gen
+   context. Clarify is reserved for greetings/meta/out-of-scope. No naive schema RAG.
 2. **Spine key** `model_uuid` joins everything to `model_desc_info`; omics side
    joins on `gene_symbol` to `gene_info."Symbol"` (capital S — case-sensitive,
    see Gotchas).
@@ -172,8 +173,11 @@ src/db_agent/
                    #   stats/ (Phase 2: vetted t-test/ANOVA/KM registry + validator
                    #   + runner, LLM emits {function,params} data, never code)
   graph/           # LangGraph: state.py (AgentState, Deps), nodes.py, build.py.
-                   #   Flow: route → [extract→resolve] → assemble → retrieve_examples
-                   #   → generate_sql → guard → execute → analyze → stats → answer
+                   #   run_agent routes (1+ domains) then runs build_domain_graph per
+                   #   domain: [extract→resolve]→assemble→retrieve_examples→generate_sql
+                   #   →guard→execute(→analyze→stats→answer if with_answer). ≥2 domains
+                   #   fan out via asyncio.gather → AgentResult.results (labeled sections).
+                   #   build_graph is the legacy single-domain graph (route node inside).
   api/             # FastAPI: app.py (create_app, POST /query/stream [SSE], GET /health,
                    #   GET /); SSE emits token/final/error events; final carries QueryResponse
   web/             # single-file chat UI (index.html, inline CSS+JS, zero deps);
@@ -252,6 +256,13 @@ unless 3.11 support is explicitly dropped.
   answer LLM only sees a *truncated* row preview, so it must never recount or
   de-duplicate — `answer_messages` passes the authoritative `rowcount`/`truncated`
   and the prompt says to state it verbatim (it answers in the question's language).
+- **The multi-domain fan-out runs per-domain subgraphs concurrently**
+  (`asyncio.gather` in `build.run_agent`). Offline fakes must be **content-aware**
+  (decide replies by model + message text, e.g. the table name in the SQL context),
+  NOT pop-order — and replicas must be thread-safe (no shared mutable list; DB
+  `execute` runs in `to_thread`). See `_MultiLLM`/`_MultiReplica` in tests.
+- **The model echoes `<angle-bracket>` placeholders literally** (Qwen once replied
+  "out-of-scope note"). In prompts, give a filled example, not a bare placeholder.
 - **Growth-curve `avg`/`sd` columns are 100% NULL** (both the efficacy and
   modeling variants). Aggregate `tumor_volume` and compute the mean yourself;
   never `MAX(avg)`.
