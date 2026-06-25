@@ -264,6 +264,22 @@
     color: var(--error);
   }
 
+  /* per-domain result sections (multi-domain fan-out); single domain renders one
+     unlabelled section, so the divider only appears between consecutive sections */
+  .result-domain + .result-domain {
+    margin-top: 16px;
+    padding-top: 14px;
+    border-top: 1px dashed var(--line-strong);
+  }
+  .domain-label {
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: .04em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin: 4px 0 8px;
+  }
+
   /* rendered markdown answer — LLM replies arrive as GFM (tables, bold, lists) */
   .answer.answer-md { white-space: normal; }
   .answer-md > :first-child { margin-top: 0; }
@@ -778,11 +794,37 @@
     var ans = el("div", "answer answer-md");
     ans.innerHTML = renderMarkdown(data.answer || "（无文字答案）");
     card.appendChild(ans);
-    if (data.sql) card.appendChild(buildSql(data.sql));
-    var chart = data.rows ? buildChart(data.rows) : null;
-    if (chart) card.appendChild(chart);
+
+    // Per-domain sections: results[] holds one section (single domain) or several
+    // (multi-domain fan-out). Fall back to the legacy top-level sql/rows if absent.
+    var sections = (data.results && data.results.length)
+      ? data.results
+      : [{ domain: null, label: null, sql: data.sql, rows: data.rows }];
+    var multi = sections.length > 1;
+    sections.forEach(function (sec) {
+      card.appendChild(buildSection(sec, multi));
+    });
+  }
+
+  function buildSection(sec, labelled) {
+    var box = el("div", "result-domain");
+    if (labelled && (sec.label || sec.domain)) {
+      box.appendChild(el("div", "domain-label", sec.label || sec.domain));
+    }
+    if (sec.clarification) {
+      box.appendChild(el("div", "answer clarify-text", sec.clarification));
+      return box;
+    }
+    if (sec.error) {
+      box.appendChild(el("div", "answer error-text", "该类数据查询出错：" + sec.error));
+      return box;
+    }
+    if (sec.sql) box.appendChild(buildSql(sec.sql));
+    var chart = sec.rows ? buildChart(sec.rows) : null;
+    if (chart) box.appendChild(chart);
     // when a chart is shown, the table starts collapsed (chart is the headline)
-    if (data.rows) card.appendChild(buildTable(data.rows, !chart));
+    if (sec.rows) box.appendChild(buildTable(sec.rows, !chart));
+    return box;
   }
 
   function buildSql(sql) {

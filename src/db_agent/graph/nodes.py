@@ -35,17 +35,29 @@ _ANSWER_FALLBACK = "（自动摘要生成超时，已返回查询到的数据与
 
 async def route_node(state: AgentState, deps: Deps) -> dict:
     res = await llm_route(deps.llm, deps.settings, state["question"], deps.layer.routable_domains())
-    if res.domain is not None:
-        return {"domain": res.domain}
+    if res.domains:
+        # Legacy single-domain graph: take the first match. The multi-domain
+        # fan-out is orchestrated in build.run_agent, not through this node.
+        return {"domain": res.domains[0]}
     return {"clarification": res.clarification, "status": "clarify"}
 
 
 def after_route(state: AgentState, deps: Deps) -> str:
     if state["status"] == "clarify":
         return END
-    if deps.layer.is_gene_bearing(state["domain"]):
-        return "extract_genes"
-    return "assemble_context"
+    return domain_entry(state, deps)
+
+
+def domain_entry(state: AgentState, deps: Deps) -> str:
+    """Entry router for a per-domain subgraph (domain already set): gene-bearing
+    domains resolve genes first, others go straight to context assembly."""
+    return "extract_genes" if deps.layer.is_gene_bearing(state["domain"]) else "assemble_context"
+
+
+def after_execute_data_only(state: AgentState) -> str:
+    """Like `after_execute` but the data-only subgraph stops at a good result
+    (no analyze/stats/answer) — used by the multi-domain fan-out."""
+    return {"ok": END, "retry": "generate_sql", "fatal": END}[state["outcome"]]
 
 
 async def extract_genes_node(state: AgentState, deps: Deps) -> dict:

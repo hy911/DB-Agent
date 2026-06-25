@@ -7,8 +7,9 @@ client.
 
 from __future__ import annotations
 
+import re
 from collections.abc import AsyncIterator
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 from db_agent.config import Settings
@@ -26,13 +27,20 @@ _CLARIFY_FALLBACK = "Could you clarify or rephrase your question?"
 
 @dataclass(frozen=True)
 class RouteResult:
-    domain: str | None = None
+    domain: str | None = None  # set when exactly one domain matched (convenience)
     clarification: str | None = None
+    domains: tuple[str, ...] = field(default_factory=tuple)  # all matched domains, in order
 
 
 async def route(
     client: LLMClient, settings: Settings, question: str, domains: list[Domain]
 ) -> RouteResult:
+    """Route a question to one OR MORE domains.
+
+    A data question now yields every applicable domain (the model replies with a
+    comma-separated list); the agent fans out across them instead of asking the
+    user which one. Only greetings/meta/out-of-scope still clarify.
+    """
     valid = {d.name for d in domains}
     raw = await client.complete(settings.model_fast, prompts.route_messages(question, domains))
     text = raw.strip()
@@ -40,9 +48,19 @@ async def route(
     if low.startswith("clarify"):
         q = text.split(":", 1)[1].strip() if ":" in text else _CLARIFY_FALLBACK
         return RouteResult(clarification=q or _CLARIFY_FALLBACK)
-    for name in valid:
-        if low.startswith(name.lower()):
-            return RouteResult(domain=name)
+    matched: list[str] = []
+    for tok in re.split(r"[,\s]+", low):
+        tok = tok.strip(".;:!?。，、 ")
+        if not tok:
+            continue
+        for name in valid:
+            if name.lower() == tok and name not in matched:
+                matched.append(name)
+    if matched:
+        return RouteResult(
+            domain=matched[0] if len(matched) == 1 else None,
+            domains=tuple(matched),
+        )
     # Unexpected output or an out-of-scope domain name: never guess — ask.
     return RouteResult(clarification=_CLARIFY_FALLBACK)
 
@@ -143,6 +161,32 @@ async def answer_stream(
     async for piece in client.complete_stream(
         settings.model_route,
         prompts.answer_messages(question, sql, preview, result.rowcount, result.truncated),
+    ):
+        yield piece
+
+
+async def answer_multi(
+    client: LLMClient,
+    settings: Settings,
+    question: str,
+    sections: list[tuple[str, int]],
+) -> str:
+    """One-sentence intro for a multi-domain fan-out (non-streaming)."""
+    text = await client.complete(
+        settings.model_route, prompts.multi_intro_messages(question, sections)
+    )
+    return text.strip()
+
+
+async def answer_multi_stream(
+    client: LLMClient,
+    settings: Settings,
+    question: str,
+    sections: list[tuple[str, int]],
+) -> AsyncIterator[str]:
+    """Streamed twin of `answer_multi`."""
+    async for piece in client.complete_stream(
+        settings.model_route, prompts.multi_intro_messages(question, sections)
     ):
         yield piece
 

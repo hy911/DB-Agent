@@ -19,7 +19,12 @@ from pathlib import Path
 from fastapi import APIRouter, FastAPI, Request
 from fastapi.responses import FileResponse, StreamingResponse
 
-from db_agent.api.schemas import QueryRequest, QueryResponse, ResultRows
+from db_agent.api.schemas import (
+    DomainResultModel,
+    QueryRequest,
+    QueryResponse,
+    ResultRows,
+)
 from db_agent.config import Settings, get_settings
 from db_agent.db import ReadReplica
 from db_agent.db.audit import AuditLog
@@ -96,24 +101,35 @@ async def query_stream(req: QueryRequest, request: Request) -> StreamingResponse
     )
 
 
+def _rows_model(qr) -> ResultRows | None:
+    if qr is None:
+        return None
+    return ResultRows(
+        columns=qr.columns, rows=qr.rows, rowcount=qr.rowcount, truncated=qr.truncated
+    )
+
+
 def _to_response(result: AgentResult) -> QueryResponse:
-    rows = None
-    if result.result is not None:
-        qr = result.result
-        rows = ResultRows(
-            columns=qr.columns,
-            rows=qr.rows,
-            rowcount=qr.rowcount,
-            truncated=qr.truncated,
+    sections = [
+        DomainResultModel(
+            domain=s.domain,
+            label=s.label,
+            sql=s.sql,
+            rows=_rows_model(s.result),
+            error=s.error,
+            clarification=s.clarification,
         )
+        for s in result.results
+    ]
     return QueryResponse(
         status=result.status,
         run_id=result.run_id,
         answer=result.answer,
-        sql=result.sql,
+        sql=result.sql,  # top-level mirror (single-domain back-compat)
         clarification=result.clarification,
         error=result.error,
-        rows=rows,
+        rows=_rows_model(result.result),
+        results=sections,
     )
 
 

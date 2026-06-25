@@ -75,6 +75,18 @@ def initial_state(question: str) -> AgentState:
 
 
 @dataclass(frozen=True)
+class DomainResult:
+    """One domain's data section in a (possibly multi-domain) answer."""
+
+    domain: str  # domain name, e.g. "expression"
+    label: str | None = None  # human display label, e.g. "基因表达"
+    sql: str | None = None
+    result: QueryResult | None = None
+    error: str | None = None
+    clarification: str | None = None
+
+
+@dataclass(frozen=True)
 class AgentResult:
     status: str
     answer: str | None
@@ -85,19 +97,28 @@ class AgentResult:
     error: str | None
     result: QueryResult | None
     run_id: str | None = None
+    # Per-domain sections: one item for a single-domain answer, N for a fan-out.
+    # Empty for clarify/error. Top-level sql/result mirror results[0] for back-compat.
+    results: tuple[DomainResult, ...] = ()
 
 
 def to_result(state: AgentState, *, run_id: str | None = None) -> AgentResult:
+    result = state.get("result")
+    sql = state.get("secured_sql")
+    sections: tuple[DomainResult, ...] = ()
+    if state["status"] == "answered" and result is not None:
+        sections = (DomainResult(domain=state.get("domain") or "", sql=sql, result=result),)
     return AgentResult(
         run_id=run_id,
         status=state["status"],
         answer=state.get("answer"),
-        sql=state.get("secured_sql"),
+        sql=sql,
         analysis_sql=state.get("analysis_sql"),
         stat_request=state.get("stat_request"),
         clarification=state.get("clarification"),
         error=state.get("error"),
-        result=state.get("result"),
+        result=result,
+        results=sections,
     )
 
 

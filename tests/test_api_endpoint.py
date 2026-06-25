@@ -115,6 +115,51 @@ def test_query_streams_tokens_then_final_with_rows():
     assert "for_bd" in payload["sql"].lower()
     assert payload["rows"]["rowcount"] == 1
     assert payload["rows"]["columns"] == ["drug_name"]
+    # single domain also exposes one labeled section in results[]
+    assert len(payload["results"]) == 1
+    assert payload["results"][0]["domain"] == "efficacy"
+    assert payload["results"][0]["rows"]["rowcount"] == 1
+
+
+class _MultiLLM:
+    """Content-aware fake routing to two domains (fan-out runs concurrently)."""
+
+    def __init__(self, intro="找到 2 类相关数据。"):
+        self.intro = intro
+
+    async def complete(self, model, messages):
+        text = " ".join(m["content"] for m in messages)
+        if model == SETTINGS.model_fast:
+            return "mutation, expression" if "domain router" in text else "NONE"
+        if model == SETTINGS.model_sql:
+            if "model_ccle_expression_data" in text:
+                return "SELECT model_uuid, log2tpm FROM model_ccle_expression_data "
+            return "SELECT model_uuid, mutation_id FROM model_ccle_mutation_data "
+        return self.intro
+
+    async def complete_stream(self, model, messages):
+        yield self.intro
+
+
+class _MultiReplica:
+    def execute(self, sql, *, needs_explain, big_tables, limit=None):
+        col = "log2tpm" if "expression" in sql else "mutation_id"
+        return QueryResult(
+            columns=[col], rows=[{col: 1}], rowcount=1, truncated=False, sql=sql, elapsed_ms=1.0
+        )
+
+
+def test_query_multi_domain_returns_labeled_sections():
+    with _client(_MultiLLM(), _MultiReplica()) as client:
+        _, events = _ask(client, "Trp53 相关数据")
+    final = events[-1]
+    assert final["type"] == "final"
+    payload = final["payload"]
+    assert payload["status"] == "answered"
+    assert payload["sql"] is None and payload["rows"] is None  # multi: no single top-level
+    domains = {s["domain"] for s in payload["results"]}
+    assert domains == {"mutation", "expression"}
+    assert all(s["rows"]["rowcount"] == 1 and s["sql"] for s in payload["results"])
 
 
 def test_query_clarify_emits_no_tokens():

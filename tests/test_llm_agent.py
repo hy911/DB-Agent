@@ -23,13 +23,25 @@ class _ScriptedClient:
 
 async def test_route_efficacy():
     c = _ScriptedClient("efficacy")
-    assert await route(c, SETTINGS, "how many models?", DOMAINS) == RouteResult(domain="efficacy")
+    res = await route(c, SETTINGS, "how many models?", DOMAINS)
+    assert res == RouteResult(domain="efficacy", domains=("efficacy",))
     assert c.last_model == "qwen-fast"
 
 
 async def test_route_expression():
     c = _ScriptedClient("expression")
-    assert await route(c, SETTINGS, "TP53 expression?", DOMAINS) == RouteResult(domain="expression")
+    res = await route(c, SETTINGS, "TP53 expression?", DOMAINS)
+    assert res.domain == "expression"
+    assert res.domains == ("expression",)
+    assert res.clarification is None
+
+
+async def test_route_multiple_domains_fans_out():
+    c = _ScriptedClient("mutation, expression")
+    res = await route(c, SETTINGS, "Trp53 相关数据", DOMAINS)
+    assert res.domains == ("mutation", "expression")
+    assert res.domain is None  # ambiguous → no single domain
+    assert res.clarification is None
 
 
 async def test_route_unroutable_domain_is_clarify():

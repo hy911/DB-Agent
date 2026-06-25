@@ -16,6 +16,22 @@ def test_route_messages_lists_domains_and_clarify():
     assert "how many models?" in msgs[-1]["content"]
 
 
+def test_route_messages_asks_for_all_applicable_domains():
+    system = route_messages("Trp53 相关数据", DOMAINS)[0]["content"].lower()
+    assert "comma-separated" in system  # list every applicable domain
+    # clarify is reserved for greeting/meta/out-of-scope, NOT "which data type?"
+    assert "never to ask which data type" in system
+
+
+def test_multi_intro_messages_carries_counts_and_language():
+    from db_agent.llm.prompts import multi_intro_messages
+
+    msgs = multi_intro_messages("Trp53 相关数据", [("基因突变", 13), ("基因表达", 1)])
+    joined = " ".join(m["content"] for m in msgs)
+    assert "13" in joined and "基因突变" in joined
+    assert "same language" in joined.lower()  # answer in the question's language
+
+
 def test_route_messages_routes_by_measurement_not_model_attrs():
     system = route_messages("q", DOMAINS)[0]["content"].lower()
     assert "expression" in system and "mutation" in system

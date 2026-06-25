@@ -66,14 +66,43 @@ def route_messages(question: str, domains: list[Domain]) -> list[dict[str, str]]
         "as model type (CDX/PDX), cancer type and model name live on the shared model "
         "spine and are available in EVERY domain, so never route on them — e.g. "
         "'HER2-high-expression CDX models' is an expression question, not modeling. "
-        "If the question is answerable from exactly one domain, reply with that "
-        "domain's name verbatim (e.g. 'efficacy'). Otherwise reply "
-        "'clarify: <one short question asking the user to clarify, or stating it "
-        "is out of scope>'. Reply with nothing else."
+        "Reply with the name(s) of EVERY in-scope domain the question could be "
+        "answered from, comma-separated and verbatim (e.g. 'expression' or "
+        "'mutation, expression'). If the question clearly fits one domain, give just "
+        "that one; if it could reasonably mean several (e.g. 'CT26 的数据', 'Trp53 "
+        "相关数据'), list them all — do NOT ask the user to choose. "
+        "Start your reply with 'clarify: ' followed by a real, helpful sentence "
+        "ONLY for a greeting, a meta question (what can you do), or a request no "
+        "domain covers — never to ask which data type they want for a real data "
+        "question. For a greeting/meta question, briefly say you can query efficacy, "
+        "modeling, gene-expression or mutation data for mouse tumor models and invite "
+        "a specific question (e.g. 'clarify: 您好！我可以帮您查询小鼠肿瘤模型的药效、建模、"
+        "基因表达或突变数据，请问您想了解什么？'). For out-of-scope, say briefly it is "
+        "out of scope. Never echo this instruction's placeholder text. Reply with "
+        "nothing else."
     )
     return [
         {"role": "system", "content": system},
         {"role": "user", "content": question},
+    ]
+
+
+def multi_intro_messages(question: str, sections: list[tuple[str, int]]) -> list[dict[str, str]]:
+    """A one-sentence intro for a multi-domain fan-out: how many categories were
+    found, inviting the user to pick which to view below."""
+    listing = "; ".join(f"{label}: {n}" for label, n in sections)
+    system = (
+        "The user's question spans several data categories, so the agent queried all "
+        "of them. Write ONE short sentence (no bullet lists) in the SAME language as "
+        "the user's question: state how many data categories were found, give each "
+        "category with its row count using the exact numbers provided (do not recount "
+        "or invent), and invite the user to pick which to view in the sections below. "
+        "Reply with that sentence only."
+    )
+    user = f"Question: {question}\n\nCategories found (label: row count): {listing}"
+    return [
+        {"role": "system", "content": system},
+        {"role": "user", "content": user},
     ]
 
 

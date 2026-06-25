@@ -383,3 +383,93 @@ async def test_run_agent_stream_clarify_has_no_tokens():
     ]
     assert not [e for e in events if e["type"] == "token"]
     assert events[-1]["result"].status == "clarify"
+
+
+async def test_single_domain_answer_has_one_result_section():
+    llm = _LLM(
+        {
+            "qwen-fast": ["efficacy"],
+            "qwen-code": ["SELECT drug_name FROM model_efficacy_info", "NONE", "NONE"],
+            "qwen-main": ["Found 1 drug."],
+        }
+    )
+    res = await _run(llm, _Replica([_qr()]))
+    assert res.status == "answered"
+    assert len(res.results) == 1  # single domain still produces one labeled section
+    assert res.results[0].result is not None and res.results[0].sql
+
+
+class _MultiLLM:
+    """Content-aware fake: routes to two domains, then answers per the schema/role.
+
+    The fan-out runs the per-domain subgraphs concurrently (asyncio.gather), so a
+    pop-order fake is unsafe — decide replies by model + message content instead.
+    """
+
+    def __init__(self, intro="为该问题找到 2 类相关数据。"):
+        self.intro = intro
+        self.answer_calls = 0
+
+    async def complete(self, model, messages):
+        text = " ".join(m["content"] for m in messages)
+        if model == SETTINGS.model_fast:  # route or extract_genes
+            return "mutation, expression" if "domain router" in text else "NONE"
+        if model == SETTINGS.model_sql:  # generate_sql — pick the domain's table
+            if "model_ccle_expression_data" in text:
+                return "SELECT model_uuid, log2tpm FROM model_ccle_expression_data "
+            return "SELECT model_uuid, mutation_id FROM model_ccle_mutation_data "
+        self.answer_calls += 1  # model_route: only the multi-domain intro
+        return self.intro
+
+    async def complete_stream(self, model, messages):
+        self.answer_calls += 1
+        yield self.intro
+
+
+class _MultiReplica:
+    """Thread-safe (no shared mutable list): returns a domain-shaped result by SQL."""
+
+    def execute(self, sql, *, needs_explain, big_tables, limit=None):
+        if "expression" in sql:
+            return QueryResult(
+                columns=["log2tpm"],
+                rows=[{"log2tpm": 5.2}],
+                rowcount=1,
+                truncated=False,
+                sql=sql,
+                elapsed_ms=1.0,
+            )
+        return QueryResult(
+            columns=["mutation_id"],
+            rows=[{"mutation_id": "R175H"}],
+            rowcount=1,
+            truncated=False,
+            sql=sql,
+            elapsed_ms=1.0,
+        )
+
+
+async def test_multi_domain_fans_out_into_sections():
+    llm = _MultiLLM()
+    res = await _run(llm, _MultiReplica(), question="Trp53 相关数据")
+    assert res.status == "answered"
+    assert res.answer == llm.intro
+    assert res.sql is None and res.result is None  # multi: no single top-level result
+    assert {s.domain for s in res.results} == {"mutation", "expression"}
+    assert all(s.result is not None and s.sql for s in res.results)
+    assert llm.answer_calls == 1  # one combined intro, NOT one heavy answer per domain
+
+
+async def test_multi_domain_stream_emits_intro_then_final():
+    llm = _MultiLLM(intro="找到 2 类相关数据，请选择查看。")
+    events = [
+        e
+        async for e in run_agent_stream(
+            "CT26 的数据", llm=llm, replica=_MultiReplica(), layer=LAYER, settings=SETTINGS
+        )
+    ]
+    tokens = [e["text"] for e in events if e["type"] == "token"]
+    assert "".join(tokens) == llm.intro  # intro streamed as tokens
+    final = events[-1]["result"]
+    assert final.status == "answered"
+    assert len(final.results) == 2
