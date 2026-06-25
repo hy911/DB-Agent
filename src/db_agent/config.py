@@ -48,6 +48,12 @@ class Settings(BaseSettings):
 
     # --- self-correction loop ---
     max_sql_retries: int = 3
+    # Data-aware self-correction: when a SELECT runs clean but returns 0 rows,
+    # the deterministic critic checks for a closed-vocabulary value mismatch and
+    # feeds a revision hint back once. The optional LLM critic stays OFF by
+    # default (cost + gateway pressure).
+    critic_enabled: bool = True
+    critic_llm_enabled: bool = False
 
     # --- LiteLLM gateway / model aliases ---
     # Accept both the DBAGENT_-prefixed names and the deployed gateway's names.

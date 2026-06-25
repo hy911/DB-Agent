@@ -34,10 +34,11 @@ where = ["src"]
 [tool.pytest.ini_options]
 pythonpath = ["src"]
 testpaths = ["tests"]
-addopts = ["-m", "not integration"]
+addopts = ["-m", "not integration and not eval"]
 asyncio_mode = "auto"
 markers = [
     "integration: requires a live PostgreSQL (DBAGENT_REPLICA_DSN); deselected by default",
+    "eval: execution-accuracy benchmark; needs live gateway + replica; deselected by default",
 ]
 
 [tool.ruff]

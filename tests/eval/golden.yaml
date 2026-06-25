@@ -1,0 +1,53 @@
+# Execution-Accuracy golden set. Each case: a natural-language question + the
+# authoritative SQL whose result set the agent must reproduce. Gold SQL is run
+# LIVE (no hardcoded counts → robust to data refreshes) and kept %-free so it
+# runs through ReadReplica.fetch without placeholder escaping. Questions are
+# phrased to route to a single domain so res.result is populated.
+#
+# Seeded from queries verified end-to-end in the 2026-06-25 log-fix session.
+
+- question: 这个数据库中一共有多少个 PDX 模型？
+  domain: model
+  gold_sql: SELECT COUNT(*) AS n FROM model_desc_info WHERE model_type = 'PDX'
+
+- question: 一共有多少个 CDX 模型？
+  domain: model
+  gold_sql: SELECT COUNT(*) AS n FROM model_desc_info WHERE model_type = 'CDX'
+
+- question: 数据库里一共有多少个模型？
+  domain: model
+  gold_sql: SELECT COUNT(*) AS n FROM model_desc_info
+
+- question: 一共有多少个癌症模型？
+  domain: model
+  gold_sql: SELECT COUNT(*) AS n FROM model_desc_info WHERE is_cancer_model = 'cancer'
+
+- question: 数据库里 cancer_type 一共有多少种？
+  domain: model
+  gold_sql: SELECT COUNT(DISTINCT cancer_type) AS n FROM model_desc_info
+
+- question: PBMCMDA-MB-231 这个模型对应的 rnaseq_id 是多少？
+  domain: model
+  gold_sql: SELECT rnaseq_id FROM model_desc_info WHERE model_name = 'PBMCMDA-MB-231'
+
+- question: 一共有多少个肺癌的 PDX 模型？
+  domain: model
+  gold_sql: >-
+    SELECT COUNT(*) AS n FROM model_desc_info
+    WHERE cancer_type = 'Lung Carcinoma' AND model_type = 'PDX'
+
+- question: EGFR 的突变位点有哪些？
+  domain: mutation
+  gold_sql: SELECT DISTINCT mutation_id FROM model_ccle_mutation_data WHERE gene_symbol = 'EGFR'
+
+- question: 有多少个模型带有 EGFR 突变？
+  domain: mutation
+  gold_sql: >-
+    SELECT COUNT(DISTINCT model_uuid) AS n FROM model_ccle_mutation_data
+    WHERE gene_symbol = 'EGFR'
+
+- question: EGFR 在所有模型里的整体平均表达量（单一数值）是多少？
+  domain: expression
+  gold_sql: >-
+    SELECT AVG(log2tpm) AS avg_log2tpm FROM model_ccle_expression_data
+    WHERE gene_symbol = 'EGFR'

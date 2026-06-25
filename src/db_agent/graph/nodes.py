@@ -23,6 +23,7 @@ from db_agent.llm import request_stat as llm_request_stat
 from db_agent.llm import route as llm_route
 from db_agent.llm.agent_llm import _rows_preview
 from db_agent.sandbox.stats import catalog_text
+from db_agent.sql.critic import diagnose_empty_result
 from db_agent.sql.errors import GuardError
 from db_agent.sql.secure import secure_query
 
@@ -54,10 +55,45 @@ def domain_entry(state: AgentState, deps: Deps) -> str:
     return "extract_genes" if deps.layer.is_gene_bearing(state["domain"]) else "assemble_context"
 
 
-def after_execute_data_only(state: AgentState) -> str:
-    """Like `after_execute` but the data-only subgraph stops at a good result
-    (no analyze/stats/answer) — used by the multi-domain fan-out."""
-    return {"ok": END, "retry": "generate_sql", "fatal": END}[state["outcome"]]
+def after_execute_to_critic(state: AgentState) -> str:
+    """A clean execute goes to the critic (data-aware review); error/fatal as before."""
+    return {"ok": "critic", "retry": "generate_sql", "fatal": END}[state["outcome"]]
+
+
+def critic_node(state: AgentState, deps: Deps) -> dict:
+    """Data-aware self-correction: a SELECT that ran clean but returned 0 rows may
+    be a fixable mistake (a closed-vocabulary filter value outside its allowed
+    set). Deterministically diagnose ONCE; on a high-precision signal, feed a
+    revision hint back to generate_sql. No signal → accept the empty result as
+    real (so a legitimately-empty query, e.g. a permission-filtered drug, never
+    loops)."""
+    result = state.get("result")
+    if (
+        not deps.settings.critic_enabled
+        or result is None
+        or result.rowcount != 0
+        or state.get("critic_used")
+        or state["attempts"] >= deps.settings.max_sql_retries
+    ):
+        return {"outcome": "ok"}
+    hint = diagnose_empty_result(
+        state.get("secured_sql") or state.get("sql") or "", deps.layer, state["domain"]
+    )
+    if hint is None:
+        # The optional LLM critic (settings.critic_llm_enabled) would go here; it
+        # stays off by default, so with no deterministic signal we accept the result.
+        return {"outcome": "ok"}
+    return {"outcome": "retry", "last_error": hint, "critic_used": True}
+
+
+def after_critic(state: AgentState) -> str:
+    """Full pipeline: accepted result proceeds to analyze; a revision re-generates."""
+    return {"ok": "analyze", "retry": "generate_sql"}[state["outcome"]]
+
+
+def after_critic_data_only(state: AgentState) -> str:
+    """Data-only fan-out subgraph: accepted result ends; a revision re-generates."""
+    return {"ok": END, "retry": "generate_sql"}[state["outcome"]]
 
 
 async def extract_genes_node(state: AgentState, deps: Deps) -> dict:
@@ -278,6 +314,12 @@ def _render_context(deps: Deps, domain: str, resolved_genes: dict[str, str]) -> 
         cols = ", ".join(_render_column(c) for c in t.columns.values())
         header = f"{t.name}: {cols}" if t.desc is None else f"{t.name} — {t.desc}: {cols}"
         lines.append(header)
+    edges = deps.layer.join_edges(domain)
+    if edges:
+        joins = "\n".join(f"  - {e}" for e in edges)
+        lines.append(
+            f"\nJoin keys (use these exact equalities to JOIN, no real FKs exist):\n{joins}"
+        )
     dom = deps.layer.get_domain(domain)
     if dom is not None and dom.access_controlled:
         perm = ", ".join(deps.layer.access_control.fields)

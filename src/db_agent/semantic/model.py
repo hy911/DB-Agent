@@ -92,6 +92,31 @@ class SemanticLayer:
         """Detail tables whose ``access_via`` points at ``hub``."""
         return [t for t in self.tables.values() if t.access_via == hub]
 
+    def join_edges(self, domain: str) -> list[str]:
+        """Concrete `A.col = B.col` join edges among the domain's in-scope tables.
+
+        Synthesized from structured metadata (spine_key, access_via, join_to_hub)
+        rather than the YAML `relationships:` glob templates, so the edges are
+        always accurate and scoped. gene_info is excluded on purpose — SQL-gen
+        filters the resolved gene_symbol directly and never JOINs gene_info.
+        """
+        spine_names = {t.name for t in self.spine_tables()}
+        spine = next(iter(self.spine_tables()), None)
+        in_scope = self.tables_in_domain(domain) + self.spine_tables() + self.reference_tables()
+        edges: list[str] = []
+        seen: set[str] = set()
+        for t in in_scope:
+            if t.name == "gene_info":
+                continue
+            # detail -> hub edges (multi-key), when the hub is also in scope
+            if t.access_via is not None and t.join_to_hub:
+                for k in t.join_to_hub:
+                    edges.append(f"{t.name}.{k} = {t.access_via}.{k}")
+            # business table -> spine edge on the spine key
+            elif spine is not None and t.name not in spine_names and t.has_column(self.spine_key):
+                edges.append(f"{t.name}.{self.spine_key} = {spine.name}.{self.spine_key}")
+        return [e for e in edges if not (e in seen or seen.add(e))]
+
     def routable_domains(self) -> list[Domain]:
         """Domains the router may pick: non-reference with at least one defined table.
 

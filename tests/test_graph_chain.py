@@ -105,6 +105,54 @@ async def test_self_correction_then_success():
     assert replica.calls == 2
 
 
+def _qr_empty(cols=("model_name",)):
+    return QueryResult(
+        columns=list(cols), rows=[], rowcount=0, truncated=False, sql="SELECT ...", elapsed_ms=1.0
+    )
+
+
+async def test_critic_revises_empty_enum_mismatch():
+    # SQL runs clean but returns 0 rows because is_cancer_model='T' is outside the
+    # closed value set {cancer, no_cancer}; the critic diagnoses it and forces a
+    # regenerate, the second SQL returns rows.
+    llm = _LLM(
+        {
+            "qwen-fast": ["model"],
+            "qwen-code": [
+                "SELECT model_name FROM model_desc_info WHERE is_cancer_model = 'T'",
+                "SELECT model_name FROM model_desc_info WHERE is_cancer_model = 'cancer'",
+                "NONE",  # analyze (second result is non-empty)
+                "NONE",  # stats
+            ],
+            "qwen-main": ["Revised answer."],
+        }
+    )
+    replica = _Replica([_qr_empty(), _qr()])
+    res = await _run(llm, replica, question="哪些是癌症模型")
+    assert res.status == "answered"
+    assert res.answer == "Revised answer."
+    assert replica.calls == 2  # the critic forced a second execution
+
+
+async def test_critic_accepts_genuinely_empty():
+    # 0 rows with no closed-vocabulary signal (an ILIKE on the open drug_name) is a
+    # real empty result — the critic must accept it and not loop.
+    llm = _LLM(
+        {
+            "qwen-fast": ["efficacy"],
+            "qwen-code": [
+                "SELECT drug_name FROM model_efficacy_info WHERE drug_name ILIKE '%zzz%'"
+            ],
+            "qwen-main": ["No matching data."],
+        }
+    )
+    replica = _Replica([_qr_empty(cols=("drug_name",))])
+    res = await _run(llm, replica)
+    assert res.status == "answered"
+    assert res.answer == "No matching data."
+    assert replica.calls == 1  # critic accepted; no second execution
+
+
 async def test_retry_budget_exhausted():
     llm = _LLM(
         {

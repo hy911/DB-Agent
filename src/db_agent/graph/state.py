@@ -34,6 +34,7 @@ class AgentState(TypedDict):
     limit: int | None
     attempts: int
     last_error: str | None
+    critic_used: bool  # data-aware empty-result revision fired (bounds it to once)
     outcome: str  # "" | "ok" | "retry" | "fatal"
     result: QueryResult | None
     analysis: QueryResult | None
@@ -61,6 +62,7 @@ def initial_state(question: str) -> AgentState:
         limit=None,
         attempts=0,
         last_error=None,
+        critic_used=False,
         outcome="",
         result=None,
         analysis=None,

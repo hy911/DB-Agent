@@ -51,6 +51,7 @@ def build_graph(deps: Deps):
     g.add_node("generate_sql", partial(nodes.generate_sql_node, deps=deps))
     g.add_node("guard", partial(nodes.guard_node, deps=deps))
     g.add_node("execute", partial(nodes.execute_node, deps=deps))
+    g.add_node("critic", partial(nodes.critic_node, deps=deps))
     g.add_node("analyze", partial(nodes.analyze_node, deps=deps))
     g.add_node("stats", partial(nodes.stats_node, deps=deps))
     g.add_node("answer", partial(nodes.answer_node, deps=deps))
@@ -67,7 +68,10 @@ def build_graph(deps: Deps):
     g.add_edge("retrieve_examples", "generate_sql")
     g.add_edge("generate_sql", "guard")
     g.add_conditional_edges("guard", nodes.after_guard, ["execute", "generate_sql", END])
-    g.add_conditional_edges("execute", nodes.after_execute, ["analyze", "generate_sql", END])
+    g.add_conditional_edges(
+        "execute", nodes.after_execute_to_critic, ["critic", "generate_sql", END]
+    )
+    g.add_conditional_edges("critic", nodes.after_critic, ["analyze", "generate_sql"])
     g.add_edge("analyze", "stats")
     g.add_edge("stats", "answer")
     g.add_edge("answer", END)
@@ -91,6 +95,7 @@ def build_domain_graph(deps: Deps, *, with_answer: bool):
     g.add_node("generate_sql", partial(nodes.generate_sql_node, deps=deps))
     g.add_node("guard", partial(nodes.guard_node, deps=deps))
     g.add_node("execute", partial(nodes.execute_node, deps=deps))
+    g.add_node("critic", partial(nodes.critic_node, deps=deps))
 
     g.add_conditional_edges(
         START, partial(nodes.domain_entry, deps=deps), ["extract_genes", "assemble_context"]
@@ -101,17 +106,20 @@ def build_domain_graph(deps: Deps, *, with_answer: bool):
     g.add_edge("retrieve_examples", "generate_sql")
     g.add_edge("generate_sql", "guard")
     g.add_conditional_edges("guard", nodes.after_guard, ["execute", "generate_sql", END])
+    g.add_conditional_edges(
+        "execute", nodes.after_execute_to_critic, ["critic", "generate_sql", END]
+    )
 
     if with_answer:
         g.add_node("analyze", partial(nodes.analyze_node, deps=deps))
         g.add_node("stats", partial(nodes.stats_node, deps=deps))
         g.add_node("answer", partial(nodes.answer_node, deps=deps))
-        g.add_conditional_edges("execute", nodes.after_execute, ["analyze", "generate_sql", END])
+        g.add_conditional_edges("critic", nodes.after_critic, ["analyze", "generate_sql"])
         g.add_edge("analyze", "stats")
         g.add_edge("stats", "answer")
         g.add_edge("answer", END)
     else:
-        g.add_conditional_edges("execute", nodes.after_execute_data_only, ["generate_sql", END])
+        g.add_conditional_edges("critic", nodes.after_critic_data_only, ["generate_sql", END])
     return g.compile()
 
 

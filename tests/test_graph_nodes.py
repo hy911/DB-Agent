@@ -6,13 +6,16 @@ from db_agent.config import Settings
 from db_agent.db import QueryResult
 from db_agent.db.gene_resolver import GeneMatch, GeneResolution
 from db_agent.graph.nodes import (
+    after_critic,
     after_execute,
+    after_execute_to_critic,
     after_guard,
     after_resolve,
     after_route,
     analyze_node,
     answer_node,
     assemble_context_node,
+    critic_node,
     execute_node,
     extract_genes_node,
     generate_sql_node,
@@ -344,6 +347,79 @@ def test_after_guard_and_execute_dispatch():
     s["outcome"] = "fatal"
     assert after_guard(s) == END
     assert after_execute(s) == END
+
+
+def _empty_result():
+    return QueryResult(
+        columns=["model_name"], rows=[], rowcount=0, truncated=False, sql="s", elapsed_ms=1.0
+    )
+
+
+def _nonempty_result():
+    return QueryResult(
+        columns=["model_name"],
+        rows=[{"model_name": "CT26"}],
+        rowcount=1,
+        truncated=False,
+        sql="s",
+        elapsed_ms=1.0,
+    )
+
+
+def test_after_execute_to_critic_routes_ok_to_critic():
+    s = initial_state("q")
+    s["outcome"] = "ok"
+    assert after_execute_to_critic(s) == "critic"
+    s["outcome"] = "retry"
+    assert after_execute_to_critic(s) == "generate_sql"
+    s["outcome"] = "fatal"
+    assert after_execute_to_critic(s) == END
+
+
+def test_critic_flags_empty_enum_mismatch_and_revises_once():
+    deps = _deps()
+    s = initial_state("哪些是癌症模型")
+    s["domain"] = "model"
+    s["result"] = _empty_result()
+    s["secured_sql"] = "SELECT model_name FROM model_desc_info WHERE is_cancer_model = 'T'"
+    out = critic_node(s, deps)
+    assert out["outcome"] == "retry"
+    assert out["critic_used"] is True
+    assert "is_cancer_model" in out["last_error"]
+    assert after_critic({**s, **out}) == "generate_sql"
+    # second pass: critic_used set → never fire again, even on another empty result
+    s2 = {**s, **out}
+    assert critic_node(s2, deps)["outcome"] == "ok"
+
+
+def test_critic_accepts_genuinely_empty_result():
+    deps = _deps()
+    s = initial_state("q")
+    s["domain"] = "efficacy"
+    s["result"] = _empty_result()
+    s["secured_sql"] = "SELECT drug_name FROM model_efficacy_info WHERE drug_name ILIKE '%zzz%'"
+    out = critic_node(s, deps)
+    assert out["outcome"] == "ok"
+    assert after_critic({**s, **out}) == "analyze"
+
+
+def test_critic_skips_when_rows_present():
+    deps = _deps()
+    s = initial_state("q")
+    s["domain"] = "model"
+    s["result"] = _nonempty_result()
+    s["secured_sql"] = "SELECT model_name FROM model_desc_info WHERE is_cancer_model = 'T'"
+    assert critic_node(s, deps)["outcome"] == "ok"  # only empty results are reviewed
+
+
+def test_render_context_includes_join_keys():
+    deps = _deps()
+    s = initial_state("q")
+    s["domain"] = "efficacy"
+    s["resolved_genes"] = {}
+    ctx = assemble_context_node(s, deps)["context"]
+    assert "Join keys" in ctx
+    assert "model_efficacy_info.model_uuid = model_desc_info.model_uuid" in ctx
 
 
 def _qr_rows():

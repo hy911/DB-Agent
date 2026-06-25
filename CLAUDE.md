@@ -66,9 +66,10 @@ gateway 504 was root-caused + fixed (Qwen3 thinking mode), so the full chain is 
 live-verified end-to-end. The chain (all layers built):
 
 ```
-domain route / clarify → context assembly (yaml) → SQL gen (qwen-code)
+domain route / clarify → context assembly (yaml + JOIN-edge graph) → SQL gen (qwen-code)
   → sqlglot validate + permission inject (sql/secure.py) → read-replica exec
-  → self-correct (≤3) → DuckDB analyze → vetted stats → NL answer + SQL
+  → self-correct on error (≤3) → critic (data-aware empty-result revision)
+  → DuckDB analyze → vetted stats → NL answer + SQL
   (SSE-streamed token-by-token via POST /query/stream)
 ```
 
@@ -106,6 +107,25 @@ the subdir `CLAUDE.md` files — do not reproduce it here):
 - **few-shot example retrieval + optional two-stage rerank** (off by default). **See
   `src/db_agent/examples/CLAUDE.md`** (incl. the reranker `hosted_vllm` gateway-config
   requirement).
+- **data-aware self-correction (`critic` node)** — after a clean `execute`, the graph
+  routes through `critic` (in both `build_graph` and `build_domain_graph`). On a
+  **0-row** result it runs `sql/critic.py:diagnose_empty_result` (pure): if a filter
+  compares a column with a closed `values` enum to a value outside that set (e.g.
+  `is_cancer_model='T'`, a lung subtype string), it feeds a revision hint back to
+  `generate_sql` **at most once** (`critic_used` flag + `max_sql_retries` budget). No
+  signal → accept the empty result as real, so a legitimately-empty query (e.g. 吉非替尼
+  filtered out by `for_bd`) never loops. Deterministic-only by default; `critic_llm_enabled`
+  (default False) reserves an optional LLM critic. Toggle: `critic_enabled` (default True).
+- **JOIN-edge graph injection** — `SemanticLayer.join_edges(domain)` synthesizes concrete
+  `A.col = B.col` edges from structured metadata (`spine_key`/`access_via`/`join_to_hub`),
+  NOT the YAML `relationships:` glob block; `_render_context` injects them as a "Join keys"
+  list (gene_info excluded — never JOINed).
+- **Execution-Accuracy eval** — `tests/eval/` (marker `eval`, deselected by default, needs
+  replica DSN + gateway, mirrors the `integration` gate). `golden.yaml` holds verified
+  `question → gold_sql`; the harness runs the agent and compares the **result set** (not SQL
+  string) to the gold SQL's via order-insensitive value-multiset (`harness.rows_match`), then
+  asserts an aggregate EA floor (0.7). Run: `uv run pytest -m eval -s`. EA <100% is expected
+  (LLM nondeterminism); it's a regression gate, not a correctness proof.
 - **observability**: per-run audit logging, **on by default**. Each run carries a
   `run_id` (also returned in the API response) + total `latency_ms`. Sink selection
   (`api/app.py` `_select_observer`): writable Postgres audit table
@@ -164,7 +184,8 @@ src/db_agent/
   semantic/        # frozen dataclasses from semantic_layer.yaml; routable_domains(),
                    #   is_gene_bearing(), tables_in_domain()
   sql/             # PURE guard rails (AST in, secured AST out): validator.py,
-                   #   permission.py, secure.py (one-call bridge), errors.py
+                   #   permission.py, secure.py (one-call bridge), errors.py,
+                   #   critic.py (data-aware empty-result diagnosis, pure)
   db/              # Postgres boundary: replica.py (read-only pool + execute + fetch),
                    #   explain.py, mapping.py, result.py, gene_resolver.py;
                    #   audit.py (SEPARATE writable AuditLog for the run-log table)
@@ -182,7 +203,7 @@ src/db_agent/
   graph/           # LangGraph: state.py (AgentState, Deps), nodes.py, build.py.
                    #   run_agent routes (1+ domains) then runs build_domain_graph per
                    #   domain: [extract→resolve]→assemble→retrieve_examples→generate_sql
-                   #   →guard→execute(→analyze→stats→answer if with_answer). ≥2 domains
+                   #   →guard→execute→critic(→analyze→stats→answer if with_answer). ≥2 domains
                    #   fan out via asyncio.gather → AgentResult.results (labeled sections).
                    #   build_graph is the legacy single-domain graph (route node inside).
   api/             # FastAPI: app.py (create_app, POST /query/stream [SSE], GET /health,
