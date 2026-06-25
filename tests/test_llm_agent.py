@@ -44,6 +44,15 @@ async def test_route_multiple_domains_fans_out():
     assert res.clarification is None
 
 
+async def test_route_model_attribute_question():
+    # pure model-attribute / identifier questions route to the spine 'model' domain
+    c = _ScriptedClient("model")
+    res = await route(c, SETTINGS, "一共有多少个 PDX 模型", DOMAINS)
+    assert res.domain == "model"
+    assert res.domains == ("model",)
+    assert res.clarification is None
+
+
 async def test_route_unroutable_domain_is_clarify():
     c = _ScriptedClient("reference")  # a real domain, but deliberately not routable
     res = await route(c, SETTINGS, "dictionary stuff", DOMAINS)

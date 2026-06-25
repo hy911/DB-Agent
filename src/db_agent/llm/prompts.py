@@ -29,6 +29,15 @@ _SQL_SYSTEM = (
     "the stored value.\n"
     "4. When you use an aggregate (COUNT/AVG/SUM/MAX/MIN), every non-aggregated "
     "column in the SELECT must appear in GROUP BY.\n"
+    "5. Gene names are already resolved to canonical symbols and given to you. "
+    "Filter the omics table's gene_symbol column directly (e.g. "
+    "med.gene_symbol = 'EGFR') — do NOT JOIN gene_info to translate them. If you "
+    'ever do reference gene_info, its column is "Symbol" with a capital S and '
+    'MUST be double-quoted (g."Symbol"); a bare g.Symbol is folded to lowercase '
+    "by PostgreSQL and errors as 'column g.symbol does not exist'.\n"
+    "6. Use ONLY tables that appear in the schema context. Never invent a table "
+    "name (e.g. rnaseq_data, rnaseq_variant_data do not exist); a model's RNA-seq "
+    "identifier is model_desc_info.rnaseq_id.\n"
     "Plain descriptive aggregation (COUNT/AVG/SUM/GROUP BY) is fine for descriptive "
     "questions. But do NOT compute inferential statistics or test statistics "
     "(t / F / chi-square / p-values) or implement a statistical test in SQL. When the "
@@ -49,7 +58,10 @@ _ANSWER_SYSTEM = (
     "Do NOT enumerate a long list item by item: when there are many rows or a "
     "column holds a long list, give that authoritative count and a few "
     "representative examples, and note that the full result is shown in the table "
-    "below — never reproduce hundreds of values in prose."
+    "below — never reproduce hundreds of values in prose. "
+    "If the user asked for an image/picture (成像图/图片) but the rows are live-imaging "
+    "NUMBERS (total_flux / avg_radiance), explain that the database stores in-vivo "
+    "imaging measurements, not pictures, and report those numbers."
 )
 
 
@@ -62,10 +74,16 @@ def route_messages(question: str, domains: list[Domain]) -> list[dict[str, str]]
         "Route by the kind of measurement the answer hinges on, NOT by incidental "
         "wording: a gene's expression LEVEL (高/低表达, 表达量) → expression; a gene's "
         "mutation/variant → mutation; drug efficacy (TGI, 给药, 生长曲线) → efficacy; "
-        "model-building/immunophenotyping/PK data → modeling. Model attributes such "
-        "as model type (CDX/PDX), cancer type and model name live on the shared model "
-        "spine and are available in EVERY domain, so never route on them — e.g. "
-        "'HER2-high-expression CDX models' is an expression question, not modeling. "
+        "model-building/immunophenotyping/PK data → modeling. When the question is "
+        "ONLY about the models themselves — counting/listing models, their type "
+        "(PDX/CDX), cancer type, name/ID, MSI, or an identifier/mapping like the "
+        "RNA-seq id (rnaseq_id) — with NO expression/mutation/efficacy/modeling "
+        "measurement involved, route to 'model' (e.g. '一共有多少个 PDX 模型', "
+        "'MDA-MB-231 的 rnaseq_id 是多少', '有哪些瘤种'). But when a measurement IS "
+        "involved, model attributes such as model type (CDX/PDX), cancer type and "
+        "model name live on the shared model spine and are available in EVERY domain, "
+        "so they don't pull routing toward 'model' — e.g. 'HER2-high-expression CDX "
+        "models' is an expression question, not model and not modeling. "
         "Reply with the name(s) of EVERY in-scope domain the question could be "
         "answered from, comma-separated and verbatim (e.g. 'expression' or "
         "'mutation, expression'). If the question clearly fits one domain, give just "
@@ -78,8 +96,11 @@ def route_messages(question: str, domains: list[Domain]) -> list[dict[str, str]]
         "modeling, gene-expression or mutation data for mouse tumor models and invite "
         "a specific question (e.g. 'clarify: 您好！我可以帮您查询小鼠肿瘤模型的药效、建模、"
         "基因表达或突变数据，请问您想了解什么？'). For out-of-scope, say briefly it is "
-        "out of scope. Never echo this instruction's placeholder text. Reply with "
-        "nothing else."
+        "out of scope. ALWAYS write the clarify sentence in the SAME language as the "
+        "user's question (a Chinese question gets a Chinese sentence). Write a real, "
+        "complete sentence — never echo this instruction's placeholder/label text "
+        "verbatim (do NOT reply literally 'out-of-scope', 'out-of-scope note', 'what "
+        "can you do', or 'clarify'). Reply with nothing else."
     )
     return [
         {"role": "system", "content": system},

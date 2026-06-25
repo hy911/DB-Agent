@@ -6,9 +6,17 @@ from db_agent.semantic import load_semantic_layer
 LAYER = load_semantic_layer(Settings(_env_file=None).semantic_layer_path)
 
 
-def test_routable_domains_are_all_four():
+def test_routable_domains_include_model_spine():
     names = {d.name for d in LAYER.routable_domains()}
-    assert names == {"efficacy", "expression", "mutation", "modeling"}
+    # the four measurement domains plus the model-attribute/identifier domain
+    assert names == {"efficacy", "expression", "mutation", "modeling", "model"}
+
+
+def test_model_domain_holds_spine_and_not_gene_bearing():
+    assert LAYER.get_table("model_desc_info").domain == "model"
+    assert LAYER.get_table("model_rnaseq_mapping").domain == "model"
+    assert [t.name for t in LAYER.spine_tables()] == ["model_desc_info"]
+    assert LAYER.is_gene_bearing("model") is False
 
 
 def test_routable_excludes_reference_and_undefined_domains():

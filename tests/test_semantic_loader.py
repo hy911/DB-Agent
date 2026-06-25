@@ -43,7 +43,11 @@ def test_column_value_hints_parse():
     assert "PDX" in desc.columns["model_type"].values
     assert desc.columns["cancer_type"].language == "english"
     assert "Lung Carcinoma" in desc.columns["cancer_type"].values  # closed vocabulary
-    assert layer.get_table("model_efficacy_info").columns["drug_name"].language == "english"
+    # drug_name is stored mixed-language (Chinese 吉非替尼 + English/brand names),
+    # so the model must keep the user's term, not translate it
+    drug = layer.get_table("model_efficacy_info").columns["drug_name"]
+    assert drug.language == "mixed"
+    assert "吉非替尼" in drug.examples
 
 
 def test_validation_rejects_missing_join_key(tmp_path):

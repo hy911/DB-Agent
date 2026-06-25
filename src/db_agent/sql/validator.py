@@ -91,12 +91,13 @@ def validation_config_for_domain(
     default_limit: int = 1000,
     max_limit: int = 10000,
 ) -> ValidationConfig:
-    """Allow only the routed domain's tables plus reference tables and the hub.
+    """Allow only the routed domain's tables plus the spine, reference tables, and the hub.
 
-    Reference tables (model_desc_info, gene_info, ...) are always allowed because
-    nearly every business query joins the spine.
+    The spine (model_desc_info) and reference tables (gene_info, ...) are always
+    allowed because nearly every business query joins the spine.
     """
     allowed = {t.name for t in layer.tables_in_domain(domain)}
+    allowed |= {t.name for t in layer.spine_tables()}
     allowed |= {t.name for t in layer.reference_tables()}
     dom = layer.get_domain(domain)
     if dom and dom.hub:

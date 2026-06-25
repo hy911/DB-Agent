@@ -32,6 +32,20 @@ def test_multi_intro_messages_carries_counts_and_language():
     assert "same language" in joined.lower()  # answer in the question's language
 
 
+def test_route_messages_has_model_spine_domain_and_same_language():
+    system = route_messages("q", DOMAINS)[0]["content"].lower()
+    assert "model" in system and "rnaseq_id" in system  # spine domain described
+    assert "same language" in system  # clarify must match the question's language
+
+
+def test_sql_system_steers_genes_without_gene_info_join():
+    system = sql_messages("q", "ctx")[0]["content"]
+    low = system.lower()
+    assert "do not join gene_info" in low or "not join gene_info" in low
+    assert '"symbol"' in low  # double-quote rule for the capital-S column
+    assert "rnaseq_data" in low  # warns against inventing this table
+
+
 def test_route_messages_routes_by_measurement_not_model_attrs():
     system = route_messages("q", DOMAINS)[0]["content"].lower()
     assert "expression" in system and "mutation" in system

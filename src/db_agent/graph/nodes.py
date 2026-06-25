@@ -264,7 +264,15 @@ def _render_context(deps: Deps, domain: str, resolved_genes: dict[str, str]) -> 
     """Render the domain's schema for sql-gen: columns with descriptions, plus —
     only for an access-controlled domain — a note that the permission columns are
     filtered automatically (so the model never filters or guesses them)."""
-    tables = deps.layer.tables_in_domain(domain) + deps.layer.reference_tables()
+    # Spine (model_desc_info) is always included so model attributes are joinable
+    # in every domain; dedup by name since the `model` domain already lists it.
+    candidates = (
+        deps.layer.tables_in_domain(domain)
+        + deps.layer.spine_tables()
+        + deps.layer.reference_tables()
+    )
+    seen: set[str] = set()
+    tables = [t for t in candidates if not (t.name in seen or seen.add(t.name))]
     lines = []
     for t in tables:
         cols = ", ".join(_render_column(c) for c in t.columns.values())
@@ -280,5 +288,10 @@ def _render_context(deps: Deps, domain: str, resolved_genes: dict[str, str]) -> 
         )
     if resolved_genes:
         mapping = ", ".join(f"{name} -> {symbol}" for name, symbol in resolved_genes.items())
-        lines.append(f"\nResolved gene names (use these canonical symbols): {mapping}")
+        lines.append(
+            f"\nResolved gene names (use these canonical symbols): {mapping}. Filter the "
+            f"omics table directly, e.g. gene_symbol = '{next(iter(resolved_genes.values()))}'"
+            f' — do NOT JOIN gene_info (its column is "Symbol" with a capital S and a bare '
+            f"g.Symbol errors)."
+        )
     return "\n".join(lines)

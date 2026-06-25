@@ -49,6 +49,40 @@ def _species_from_casing(query: str) -> str | None:
     return None
 
 
+def _norm(s: str) -> str:
+    """Casefold + drop non-alphanumerics so 'PD-1', 'pd1', 'PD1' compare equal."""
+    return "".join(ch for ch in s if ch.isalnum()).upper()
+
+
+def _is_subseq(needle: str, haystack: str) -> bool:
+    it = iter(haystack)
+    return all(ch in it for ch in needle)
+
+
+def _match_rank(query: str, symbol: str) -> int:
+    """How closely a candidate symbol resembles the raw query (lower = closer).
+
+    The noisy synonym table maps a common alias like 'PD1' to several symbols
+    ({PDCD1, SNCA, SPATA2}); rank by string resemblance so the obvious target
+    (PDCD1 — query is a subsequence of it) beats the trigram-junk ones.
+    """
+    q, s = _norm(query), _norm(symbol)
+    if q == s:
+        return 0
+    if s.startswith(q):
+        return 1
+    if _is_subseq(q, s):
+        return 2
+    return 3
+
+
+def _rank(query: str, matches: list[GeneMatch]) -> list[GeneMatch]:
+    """Sort by resemblance, then shorter symbol, then name; dedup by symbol."""
+    ordered = sorted(matches, key=lambda m: (_match_rank(query, m.symbol), len(m.symbol), m.symbol))
+    seen: set[str] = set()
+    return [m for m in ordered if not (m.symbol in seen or seen.add(m.symbol))]
+
+
 def _decide(query: str, exact: list[GeneMatch], fuzzy: list[GeneMatch]) -> GeneResolution:
     distinct = {m.symbol for m in exact}
     if len(distinct) == 1:
@@ -61,7 +95,15 @@ def _decide(query: str, exact: list[GeneMatch], fuzzy: list[GeneMatch]) -> GeneR
             narrowed = [m for m in exact if m.species == species]
             if len({m.symbol for m in narrowed}) == 1:
                 return GeneResolution(query, "resolved", narrowed[0].symbol, narrowed)
-        return GeneResolution(query, "ambiguous", None, list(exact))
+        # Otherwise rank candidates by resemblance to the query: if one clearly
+        # wins (strictly closer than the runner-up, and itself a real match), take
+        # it; else clarify, but with the candidates ordered most-relevant first.
+        ranked = _rank(query, exact)
+        best_rank = _match_rank(query, ranked[0].symbol)
+        runner_rank = _match_rank(query, ranked[1].symbol) if len(ranked) > 1 else 99
+        if best_rank <= 2 and best_rank < runner_rank:
+            return GeneResolution(query, "resolved", ranked[0].symbol, ranked)
+        return GeneResolution(query, "ambiguous", None, ranked)
     if fuzzy:
         ranked = sorted(fuzzy, key=lambda m: m.score, reverse=True)
         return GeneResolution(query, "ambiguous", None, ranked)

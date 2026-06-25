@@ -77,6 +77,17 @@ class SemanticLayer:
     def reference_tables(self) -> list[Table]:
         return self.tables_in_domain("reference")
 
+    def spine_tables(self) -> list[Table]:
+        """The central hub table(s) everything joins to (pk == spine_key).
+
+        Always injected into every domain's sql-gen context so the model can join
+        or filter on model attributes (model_type, cancer_type, rnaseq_id, ...)
+        regardless of the routed domain. Previously this table lived in the
+        `reference` domain (and rode in via reference_tables); it now has its own
+        routable `model` domain, so the spine is surfaced explicitly here.
+        """
+        return [t for t in self.tables.values() if t.pk == self.spine_key]
+
     def detail_tables_of(self, hub: str) -> list[Table]:
         """Detail tables whose ``access_via`` points at ``hub``."""
         return [t for t in self.tables.values() if t.access_via == hub]

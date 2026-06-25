@@ -80,11 +80,18 @@ Current capabilities (history/forensics live in git + `docs/superpowers/specs/` 
 the subdir `CLAUDE.md` files — do not reproduce it here):
 
 - **All layers built**: semantic / sql / db / llm / graph / api / observability.
-- **4 routable domains**, data-driven via `routable_domains()`: `efficacy` + `modeling`
-  (access-controlled) and `expression` + `mutation` (not). New domains/tables are pure
-  `semantic_layer.yaml` additions — **zero source changes** (proven repeatedly).
-  `expression`/`mutation` are gene-bearing big tables (EXPLAIN gate on
+- **5 routable domains**, data-driven via `routable_domains()`: `efficacy` + `modeling`
+  (access-controlled), `expression` + `mutation` (not), and `model` (the spine itself).
+  New domains/tables are pure `semantic_layer.yaml` additions — **zero source changes**
+  (proven repeatedly). `expression`/`mutation` are gene-bearing big tables (EXPLAIN gate on
   `model_ccle_expression_data` ~36M and `model_ccle_mutation_data` ~5.5M).
+- **model** domain: `model_desc_info` (the spine) + `model_rnaseq_mapping`. It owns
+  *pure model-attribute/identifier* questions (model count, type PDX/CDX, cancer_type,
+  name/ID, `rnaseq_id`) that no measurement domain covers — without it they fell to
+  out-of-scope clarify. `model_desc_info` is also the **spine**: `spine_tables()` (pk ==
+  `spine_key`) is injected into every domain's sql-gen context AND validator scope, so a
+  measurement query can still JOIN/filter model attributes even though the spine is no
+  longer in the `reference` domain.
 - **modeling** (access-controlled): hub `modeling_attr_info` (`for_bd='yes'`) + 9 detail
   tables filtered by correlated **`EXISTS`** semi-join. Most join on
   `(model_uuid, model_no, group_id)`; `modeling_panel_data` is model-level → **2-key**
@@ -276,9 +283,9 @@ unless 3.11 support is explicitly dropped.
   `from`). When walking a SELECT's direct sources, check both keys.
 - A domain may be declared under `domains:` with no tables yet — a forward
   declaration, not an error; `routable_domains()` excludes it until it gains
-  tables (this is the zero-code extension path). All four business domains
-  (efficacy / expression / mutation / modeling) are now defined and routable; none
-  is currently pending.
+  tables (this is the zero-code extension path). All five domains (efficacy /
+  expression / mutation / modeling / model) are now defined and routable; none is
+  currently pending.
 - The permission injector must snapshot SELECT scopes **before** mutating, and
   tag its generated `EXISTS` sub-select, so a second pass doesn't re-enter and
   double-filter (idempotency).
@@ -289,7 +296,19 @@ unless 3.11 support is explicitly dropped.
   is title-case (`Egfr`, `Trp53`). `gene_info`'s column is `"Symbol"` (capital S
   → must double-quote in SQL). Gene matching is therefore **case-sensitive** — a
   case-insensitive match collapses `EGFR`/`Egfr` and makes nearly everything
-  ambiguous.
+  ambiguous. **SQL-gen never JOINs `gene_info`** — the gene is already resolved to a
+  canonical symbol and injected, so it filters `gene_symbol = '<symbol>'` directly (a
+  bare `g.Symbol` join was the #1 live error: PG folds it to `g.symbol` → "column does
+  not exist", burning all 3 retries).
+- **`gene_synonyms` is noisy & many-to-many** (~287K rows): a common alias like `PD1`
+  maps to `{PDCD1, SNCA, SPATA2}`. `gene_resolver._decide` ranks multi-symbol matches by
+  resemblance to the query (equality > prefix > subsequence > none) and auto-resolves the
+  clear winner (`PD1` → `PDCD1`); only genuinely close ties still clarify. Species-casing
+  disambiguation (`HER2` → human `ERBB2`) runs first and is preserved.
+- **`drug_name` is mixed-language, NOT english** (`吉非替尼`, `Herceptin+Perjeta`,
+  `Opdivo`): `language: mixed` so the model keeps the user's original term for ILIKE and
+  does NOT translate (`吉非替尼`→`gefitinib` returned 0). Note a `吉非替尼` hit can still be
+  0 rows *after* the `for_bd='yes'` permission filter — that's correct, not a bug.
 - **`ReadReplica.execute`** secures + runs LLM SQL (EXPLAIN gate, LIMIT);
   **`ReadReplica.fetch(sql, params)`** is for trusted hand-written parameterized
   queries (e.g. gene resolution) — value always bound, never interpolated.

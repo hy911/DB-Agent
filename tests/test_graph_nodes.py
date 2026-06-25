@@ -466,7 +466,9 @@ def test_assemble_context_mutation_omits_permission_note():
     ctx = assemble_context_node(s, deps)["context"]
     assert "model_ccle_mutation_data" in ctx
     assert "oncokb" in ctx
-    assert "do not" not in ctx.lower()  # not access-controlled
+    # not access-controlled: no row-level permission note (the gene hint may say
+    # "do not JOIN gene_info", so target the permission phrasing specifically)
+    assert "permissions are already enforced" not in ctx.lower()
     assert "p53 -> TP53" in ctx or "p53 → TP53" in ctx
 
 
