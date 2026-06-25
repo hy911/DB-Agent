@@ -116,6 +116,19 @@ the subdir `CLAUDE.md` files — do not reproduce it here):
   signal → accept the empty result as real, so a legitimately-empty query (e.g. 吉非替尼
   filtered out by `for_bd`) never loops. Deterministic-only by default; `critic_llm_enabled`
   (default False) reserves an optional LLM critic. Toggle: `critic_enabled` (default True).
+  **Value alignment (Phase 2):** if the enum check finds nothing, the critic calls
+  `db/value_resolver.py:align_values` (DB-backed, injected via `Deps.align_values`) — for
+  filters on `fuzzy_align`-flagged open-text columns (`drug_name`, `model_name`) it runs
+  pg_trgm `similarity()` on the replica and, when the nearest *real* stored value DIFFERS
+  from the user's term (typo/variant: "Docetaxe"→"Docetaxel"), revises. Returns None when the
+  term already matches a stored value, so 吉非替尼 (a real drug filtered by `for_bd`) stays a
+  correct 0-row answer. Toggle: `value_align_enabled` (default True); reuses `critic_used`.
+- **structure-aware few-shot recall (DAIL-SQL, Phase 2, default off)** — `example_structural`
+  adds a second recall channel: `retrieve_examples_node` drafts a cheap SQL (no examples),
+  `examples/skeleton.py:skeletonize` de-parameterizes it (literals → `?`), and
+  `ExampleStore.search_dual` fuses question-cosine + skeleton-cosine via RRF. The index
+  (`build.py`) now stores `skeletons` + `skeleton_vectors`; an old index without them falls
+  back to question-only recall. Costs one extra SQL-gen call when on. **See `examples/CLAUDE.md`.**
 - **JOIN-edge graph injection** — `SemanticLayer.join_edges(domain)` synthesizes concrete
   `A.col = B.col` edges from structured metadata (`spine_key`/`access_via`/`join_to_hub`),
   NOT the YAML `relationships:` glob block; `_render_context` injects them as a "Join keys"
@@ -187,15 +200,17 @@ src/db_agent/
                    #   permission.py, secure.py (one-call bridge), errors.py,
                    #   critic.py (data-aware empty-result diagnosis, pure)
   db/              # Postgres boundary: replica.py (read-only pool + execute + fetch),
-                   #   explain.py, mapping.py, result.py, gene_resolver.py;
+                   #   explain.py, mapping.py, result.py, gene_resolver.py,
+                   #   value_resolver.py (pg_trgm value alignment for the critic);
                    #   audit.py (SEPARATE writable AuditLog for the run-log table)
   llm/             # LiteLLM client + prompts + tasks (route / generate_sql /
                    #   answer / extract_genes / analyze_sql / request_stat /
                    #   answer_stat); embedding.py (LiteLLMEmbeddingClient);
                    #   rerank.py (LiteLLMRerankClient, optional 2nd-stage rerank)
   examples/        # few-shot example retrieval: model.py (Example), store.py (local
-                   #   .npz cosine index), build.py (offline builder + CLI),
-                   #   retriever.py (request-time embed+search; off by default)
+                   #   .npz cosine index + search_dual RRF), build.py (offline builder + CLI),
+                   #   retriever.py (request-time embed+search; off by default),
+                   #   skeleton.py (SQL de-parameterization for structure-aware recall)
   sandbox/         # the ONLY DuckDB boundary: validator.py (analysis-SQL guard),
                    #   engine.py (locked-down in-memory DuckDBSandbox.run);
                    #   stats/ (Phase 2: vetted t-test/ANOVA/KM registry + validator
@@ -329,7 +344,12 @@ unless 3.11 support is explicitly dropped.
 - **`drug_name` is mixed-language, NOT english** (`吉非替尼`, `Herceptin+Perjeta`,
   `Opdivo`): `language: mixed` so the model keeps the user's original term for ILIKE and
   does NOT translate (`吉非替尼`→`gefitinib` returned 0). Note a `吉非替尼` hit can still be
-  0 rows *after* the `for_bd='yes'` permission filter — that's correct, not a bug.
+  0 rows *after* the `for_bd='yes'` permission filter — that's correct, not a bug. A column
+  marked `fuzzy_align: true` in the yaml (currently `drug_name`, `model_name`) gets pg_trgm
+  **value alignment** in the critic on a 0-row result (`db/value_resolver.py`); it only revises
+  when the nearest real value differs from the user's term, so it never loops on a correct
+  permission-empty result. `value_resolver` interpolates the table/column identifiers (trusted,
+  from the validated layer) but ALWAYS binds the user value as a parameter.
 - **`ReadReplica.execute`** secures + runs LLM SQL (EXPLAIN gate, LIMIT);
   **`ReadReplica.fetch(sql, params)`** is for trusted hand-written parameterized
   queries (e.g. gene resolution) — value always bound, never interpolated.

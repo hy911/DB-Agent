@@ -17,6 +17,15 @@ the pairs into `sql_messages`. Embedding seam: `llm/embedding.py`
 (`LiteLLMEmbeddingClient`); injected via `Deps.retrieve_examples` (default no-op unless
 an index path is set).
 
+**Optional structure-aware dual recall** (`Settings.example_structural=True`, DAIL-SQL): a
+second channel keyed on SQL structure, not question surface. The build step embeds both the
+question AND a `skeleton.py:skeletonize`'d (de-parameterized, literals→`?`) form of the SQL,
+storing `skeletons` + `skeleton_vectors` in the `.npz`. At request time, `retrieve_examples_node`
+drafts a cheap SQL (no examples) → skeletonizes it → `ExampleStore.search_dual` fuses
+question-cosine and skeleton-cosine rankings via **Reciprocal Rank Fusion**. Costs one extra
+SQL-gen call; **off by default**. An index built before this (no `skeleton_vectors`) auto-falls
+back to question-only `search` (`store.has_skeletons` is False). Rebuild the index to enable.
+
 **Optional two-stage rerank** (`Settings.example_rerank=True`): fetch a larger cosine
 top-N (`example_rerank_candidates`, default 10) then reorder to `example_top_k` via
 `qwen-reranker` (`llm/rerank.py`, standard `POST /v1/rerank` contract); fail-soft →

@@ -14,16 +14,25 @@ from pathlib import Path
 import numpy as np
 
 from db_agent.examples.model import Example
+from db_agent.examples.skeleton import skeletonize
 
 
-def save_index(path: Path, vectors: np.ndarray, examples: list[Example]) -> None:
-    np.savez(
-        path,
-        vectors=np.asarray(vectors, dtype=np.float32),
-        questions=np.array([e.question for e in examples], dtype=object),
-        sqls=np.array([e.sql for e in examples], dtype=object),
-        domains=np.array([e.domain for e in examples], dtype=object),
-    )
+def save_index(
+    path: Path,
+    vectors: np.ndarray,
+    examples: list[Example],
+    skeleton_vectors: np.ndarray | None = None,
+) -> None:
+    arrays = {
+        "vectors": np.asarray(vectors, dtype=np.float32),
+        "questions": np.array([e.question for e in examples], dtype=object),
+        "sqls": np.array([e.sql for e in examples], dtype=object),
+        "domains": np.array([e.domain for e in examples], dtype=object),
+        "skeletons": np.array([e.skeleton for e in examples], dtype=object),
+    }
+    if skeleton_vectors is not None:
+        arrays["skeleton_vectors"] = np.asarray(skeleton_vectors, dtype=np.float32)
+    np.savez(path, **arrays)
 
 
 def load_examples_from_jsonl(jsonl_path: Path) -> list[Example]:
@@ -45,7 +54,7 @@ def load_examples_from_jsonl(jsonl_path: Path) -> list[Example]:
         if key in seen:
             continue
         seen.add(key)
-        examples.append(Example(question, sql, domain))
+        examples.append(Example(question, sql, domain, skeletonize(sql)))
     return examples
 
 
@@ -58,7 +67,9 @@ def build_index(
     if not examples:
         return 0
     vectors = np.asarray(embed([e.question for e in examples]), dtype=np.float32)
-    save_index(out_path, vectors, examples)
+    # Second channel for structure-aware recall: embed the de-parameterized SQL.
+    skeleton_vectors = np.asarray(embed([e.skeleton for e in examples]), dtype=np.float32)
+    save_index(out_path, vectors, examples, skeleton_vectors)
     return len(examples)
 
 

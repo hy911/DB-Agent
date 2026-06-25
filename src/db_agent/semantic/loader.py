@@ -65,6 +65,7 @@ def _parse(raw: dict) -> SemanticLayer:
                 values=tuple((col or {}).get("values") or ()),
                 examples=tuple((col or {}).get("examples") or ()),
                 language=(col or {}).get("language"),
+                fuzzy_align=bool((col or {}).get("fuzzy_align", False)),
             )
             for col_name, col in (t.get("columns") or {}).items()
         }

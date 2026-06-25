@@ -12,10 +12,10 @@ from db_agent.examples.store import ExampleStore
 from db_agent.llm.embedding import EmbeddingClient
 from db_agent.llm.rerank import RerankClient
 
-Retriever = Callable[[str, str], list[Example]]
+Retriever = Callable[..., list[Example]]
 
 
-def _no_examples(domain: str, question: str) -> list[Example]:
+def _no_examples(domain: str, question: str, draft_skeleton: str | None = None) -> list[Example]:
     return []
 
 
@@ -28,10 +28,16 @@ def make_retriever(
 ) -> Retriever:
     cand_n = (candidates or k) if rerank is not None else k
 
-    def retrieve(domain: str, question: str) -> list[Example]:
+    def retrieve(domain: str, question: str, draft_skeleton: str | None = None) -> list[Example]:
         try:
-            vec = embed.embed([question])[0]
-            hits = store.search(vec, domain, cand_n)
+            # Structure-aware dual recall when a draft SQL skeleton is supplied and
+            # the index carries skeleton vectors; one batched embed call for both.
+            if draft_skeleton is not None and store.has_skeletons:
+                qvec, svec = embed.embed([question, draft_skeleton])
+                hits = store.search_dual(qvec, svec, domain, cand_n)
+            else:
+                vec = embed.embed([question])[0]
+                hits = store.search(vec, domain, cand_n)
         except Exception:
             return []  # fail-soft: retrieval is additive, never break a good run
         if rerank is not None and len(hits) > 1:

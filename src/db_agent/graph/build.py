@@ -195,6 +195,7 @@ def _build_deps(
     layer: SemanticLayer,
     settings: Settings,
     resolve_gene: Callable[[ReadReplica, str], GeneResolution] | None,
+    align_values: Callable[[ReadReplica, SemanticLayer, str, str | None], str | None] | None,
     run_sandbox: Callable[[list[str], list[dict[str, object]], str], QueryResult] | None,
     run_stat: Callable[[list[str], list[dict[str, object]], str], StatResult] | None,
     retrieve_examples: Retriever | None,
@@ -202,6 +203,8 @@ def _build_deps(
     deps_kwargs = {"llm": llm, "replica": replica, "layer": layer, "settings": settings}
     if resolve_gene is not None:
         deps_kwargs["resolve_gene"] = resolve_gene
+    if align_values is not None:
+        deps_kwargs["align_values"] = align_values
     if run_sandbox is not None:
         deps_kwargs["run_sandbox"] = run_sandbox
     if run_stat is not None:
@@ -243,6 +246,7 @@ async def run_agent(
     settings: Settings,
     observer: Observer | None = None,
     resolve_gene: Callable[[ReadReplica, str], GeneResolution] | None = None,
+    align_values: Callable[[ReadReplica, SemanticLayer, str, str | None], str | None] | None = None,
     run_sandbox: Callable[[list[str], list[dict[str, object]], str], QueryResult] | None = None,
     run_stat: Callable[[list[str], list[dict[str, object]], str], StatResult] | None = None,
     retrieve_examples: Retriever | None = None,
@@ -253,6 +257,7 @@ async def run_agent(
         layer=layer,
         settings=settings,
         resolve_gene=resolve_gene,
+        align_values=align_values,
         run_sandbox=run_sandbox,
         run_stat=run_stat,
         retrieve_examples=retrieve_examples,
@@ -324,6 +329,7 @@ async def run_agent_stream(
     settings: Settings,
     observer: Observer | None = None,
     resolve_gene: Callable[[ReadReplica, str], GeneResolution] | None = None,
+    align_values: Callable[[ReadReplica, SemanticLayer, str, str | None], str | None] | None = None,
     run_sandbox: Callable[[list[str], list[dict[str, object]], str], QueryResult] | None = None,
     run_stat: Callable[[list[str], list[dict[str, object]], str], StatResult] | None = None,
     retrieve_examples: Retriever | None = None,
@@ -338,6 +344,7 @@ async def run_agent_stream(
         layer=layer,
         settings=settings,
         resolve_gene=resolve_gene,
+        align_values=align_values,
         run_sandbox=run_sandbox,
         run_stat=run_stat,
         retrieve_examples=retrieve_examples,

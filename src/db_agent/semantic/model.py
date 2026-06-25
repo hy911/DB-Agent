@@ -19,6 +19,7 @@ class Column:
     values: tuple[str, ...] = ()  # closed enum of stored values, if known
     examples: tuple[str, ...] = ()  # sample values for an open vocabulary
     language: str | None = None  # english | chinese | mixed — language of stored values
+    fuzzy_align: bool = False  # open-vocab column whose 0-row filters get pg_trgm value alignment
 
 
 @dataclass(frozen=True)

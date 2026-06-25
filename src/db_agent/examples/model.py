@@ -10,3 +10,4 @@ class Example:
     question: str
     sql: str
     domain: str
+    skeleton: str = ""  # de-parameterized SQL template, for structure-aware recall

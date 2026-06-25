@@ -13,6 +13,7 @@ import logging
 from langgraph.config import get_stream_writer
 from langgraph.graph import END
 
+from db_agent.examples.skeleton import skeletonize
 from db_agent.graph.state import AgentState, Deps
 from db_agent.llm import analyze_sql as llm_analyze_sql
 from db_agent.llm import answer_stat_stream as llm_answer_stat_stream
@@ -76,9 +77,13 @@ def critic_node(state: AgentState, deps: Deps) -> dict:
         or state["attempts"] >= deps.settings.max_sql_retries
     ):
         return {"outcome": "ok"}
-    hint = diagnose_empty_result(
-        state.get("secured_sql") or state.get("sql") or "", deps.layer, state["domain"]
-    )
+    sql_text = state.get("secured_sql") or state.get("sql") or ""
+    hint = diagnose_empty_result(sql_text, deps.layer, state["domain"])
+    if hint is None and deps.settings.value_align_enabled:
+        # Open-vocab value alignment (drug_name/model_name): the nearest real value
+        # via pg_trgm. Returns None when the filter already matches a stored value,
+        # so a legitimately-empty (e.g. permission-filtered) query is accepted.
+        hint = deps.align_values(deps.replica, deps.layer, sql_text, state["domain"])
     if hint is None:
         # The optional LLM critic (settings.critic_llm_enabled) would go here; it
         # stays off by default, so with no deterministic signal we accept the result.
@@ -137,8 +142,19 @@ def assemble_context_node(state: AgentState, deps: Deps) -> dict:
     return {"context": _render_context(deps, state["domain"], state["resolved_genes"])}
 
 
-def retrieve_examples_node(state: AgentState, deps: Deps) -> dict:
-    return {"examples": deps.retrieve_examples(state["domain"], state["question"])}
+async def retrieve_examples_node(state: AgentState, deps: Deps) -> dict:
+    draft_skeleton: str | None = None
+    if deps.settings.example_structural:
+        # DAIL-SQL second channel: a cheap draft SQL (no examples) → de-parameterized
+        # skeleton → structure-aware recall. Fail-soft: degrade to question-only.
+        try:
+            draft = await llm_generate_sql(
+                deps.llm, deps.settings, state["question"], state["context"]
+            )
+            draft_skeleton = skeletonize(draft)
+        except Exception:
+            draft_skeleton = None
+    return {"examples": deps.retrieve_examples(state["domain"], state["question"], draft_skeleton)}
 
 
 async def generate_sql_node(state: AgentState, deps: Deps) -> dict:

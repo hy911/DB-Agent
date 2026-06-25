@@ -9,6 +9,7 @@ from typing import TypedDict
 from db_agent.config import Settings
 from db_agent.db import GeneResolution, QueryResult, ReadReplica
 from db_agent.db import resolve_gene as _default_resolve_gene
+from db_agent.db.value_resolver import align_values as _default_align_values
 from db_agent.examples.model import Example
 from db_agent.examples.retriever import Retriever, _no_examples
 from db_agent.llm.client import LLMClient
@@ -131,6 +132,10 @@ class Deps:
     layer: SemanticLayer
     settings: Settings
     resolve_gene: Callable[[ReadReplica, str], GeneResolution] = _default_resolve_gene
+    # Data-aware value alignment (DB-backed, used by the critic on 0-row results).
+    align_values: Callable[[ReadReplica, SemanticLayer, str, str | None], str | None] = (
+        _default_align_values
+    )
     run_sandbox: Callable[[list[str], list[dict[str, object]], str], QueryResult] = (
         _default_run_sandbox
     )

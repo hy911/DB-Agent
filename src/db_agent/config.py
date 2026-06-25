@@ -54,6 +54,9 @@ class Settings(BaseSettings):
     # default (cost + gateway pressure).
     critic_enabled: bool = True
     critic_llm_enabled: bool = False
+    # pg_trgm value alignment for open-vocab filters (drug_name, model_name): on a
+    # 0-row result the critic finds the nearest real stored value and revises.
+    value_align_enabled: bool = True
 
     # --- LiteLLM gateway / model aliases ---
     # Accept both the DBAGENT_-prefixed names and the deployed gateway's names.
@@ -96,6 +99,10 @@ class Settings(BaseSettings):
     # Optional second-stage rerank (off by default; needs a working gateway /v1/rerank).
     example_rerank: bool = False
     example_rerank_candidates: int = 10
+    # Structure-aware dual recall (DAIL-SQL): draft a SQL, skeletonize it, and fuse
+    # question + skeleton similarity. Off by default — costs one extra SQL-gen call
+    # and needs an index built with skeleton vectors.
+    example_structural: bool = False
     # Qwen3 models default to "thinking" mode and emit long reasoning before the
     # answer — for routing / SQL-gen / answer that just burns latency and makes the
     # gateway 504 on the upstream timeout. Disable it by default (these are

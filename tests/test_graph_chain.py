@@ -34,6 +34,10 @@ class _Replica:
             raise item
         return item
 
+    def fetch(self, sql, params=()):
+        # Used by the critic's value aligner (pg_trgm). Default: no near match.
+        return getattr(self, "_fetch_rows", [])
+
 
 def _resolver(mapping):
     def resolve(replica, name):
@@ -132,6 +136,29 @@ async def test_critic_revises_empty_enum_mismatch():
     assert res.status == "answered"
     assert res.answer == "Revised answer."
     assert replica.calls == 2  # the critic forced a second execution
+
+
+async def test_value_alignment_revises_empty_then_succeeds():
+    # 0 rows on a drug_name typo; the critic's value aligner finds the real stored
+    # value via pg_trgm (faked) and forces a regenerate that returns rows.
+    llm = _LLM(
+        {
+            "qwen-fast": ["efficacy"],
+            "qwen-code": [
+                "SELECT drug_name FROM model_efficacy_info WHERE drug_name ILIKE '%吉非ti尼%'",
+                "SELECT drug_name FROM model_efficacy_info WHERE drug_name ILIKE '%吉非替尼%'",
+                "NONE",  # analyze
+                "NONE",  # stats
+            ],
+            "qwen-main": ["Found it after alignment."],
+        }
+    )
+    replica = _Replica([_qr_empty(cols=("drug_name",)), _qr()])
+    replica._fetch_rows = [{"v": "吉非替尼", "s": 0.55}]  # nearest real value
+    res = await _run(llm, replica, question="哪些模型用了吉非ti尼")
+    assert res.status == "answered"
+    assert res.answer == "Found it after alignment."
+    assert replica.calls == 2  # aligner forced a second execution
 
 
 async def test_critic_accepts_genuinely_empty():
@@ -346,7 +373,7 @@ async def test_examples_injected_end_to_end():
         replica=_Replica([_qr()]),
         layer=LAYER,
         settings=SETTINGS,
-        retrieve_examples=lambda domain, q: [hit],
+        retrieve_examples=lambda domain, q, draft=None: [hit],
     )
     assert res.status == "answered"
 

@@ -214,23 +214,49 @@ async def test_route_expression_sets_domain():
     assert out["domain"] == "expression"
 
 
-def test_retrieve_examples_node_injects():
+async def test_retrieve_examples_node_injects():
     from db_agent.examples.model import Example
 
     hit = Example("past q", "SELECT 1", "efficacy")
     deps = _deps()
-    object.__setattr__(deps, "retrieve_examples", lambda domain, q: [hit])
+    object.__setattr__(deps, "retrieve_examples", lambda domain, q, draft=None: [hit])
     s = initial_state("q")
     s["domain"] = "efficacy"
-    out = retrieve_examples_node(s, deps)
+    out = await retrieve_examples_node(s, deps)
     assert out["examples"] == [hit]
 
 
-def test_retrieve_examples_node_default_is_empty():
+async def test_retrieve_examples_node_default_is_empty():
     deps = _deps()  # default Deps.retrieve_examples is the no-op
     s = initial_state("q")
     s["domain"] = "efficacy"
-    assert retrieve_examples_node(s, deps) == {"examples": []}
+    assert await retrieve_examples_node(s, deps) == {"examples": []}
+
+
+async def test_retrieve_examples_structural_drafts_sql_skeleton():
+    # example_structural=True → node drafts a SQL, skeletonizes it, and passes the
+    # skeleton to the retriever as the second recall channel.
+    from db_agent.config import Settings
+    from db_agent.examples.model import Example
+
+    captured = {}
+
+    def _retriever(domain, question, draft_skeleton=None):
+        captured["skeleton"] = draft_skeleton
+        return [Example("past", "SELECT 1", "efficacy")]
+
+    deps = _deps(
+        llm=_LLM({"qwen-code": ["SELECT drug_name FROM model_efficacy_info WHERE x = 'A'"]})
+    )
+    object.__setattr__(deps, "settings", Settings(_env_file=None, example_structural=True))
+    object.__setattr__(deps, "retrieve_examples", _retriever)
+    s = initial_state("q")
+    s["domain"] = "efficacy"
+    s["context"] = "ctx"
+    out = await retrieve_examples_node(s, deps)
+    assert out["examples"][0].question == "past"
+    assert captured["skeleton"] is not None
+    assert "'A'" not in captured["skeleton"]  # literal stripped in the draft skeleton
 
 
 async def test_generate_sql_forwards_examples():
@@ -394,6 +420,8 @@ def test_critic_flags_empty_enum_mismatch_and_revises_once():
 
 def test_critic_accepts_genuinely_empty_result():
     deps = _deps()
+    # value aligner finds no near match → no hint → accept (no real DB in unit test)
+    object.__setattr__(deps, "align_values", lambda *a, **k: None)
     s = initial_state("q")
     s["domain"] = "efficacy"
     s["result"] = _empty_result()

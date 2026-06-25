@@ -116,3 +116,37 @@ def test_default_retriever_rerank_enabled_builds_client(monkeypatch, tmp_path):
     )
     retrieve = default_retriever(s)
     assert retrieve is not _no_examples  # a real retriever was built
+
+
+def test_make_retriever_uses_dual_channel_with_draft_skeleton():
+    hit = Example("past q", "SELECT 1", "efficacy", "SELECT ?")
+
+    class _DualStore:
+        has_skeletons = True
+
+        def __init__(self):
+            self.dual_args = None
+
+        def search(self, vec, domain, k):  # pragma: no cover - should not be hit
+            raise AssertionError("expected search_dual, not search")
+
+        def search_dual(self, qvec, svec, domain, k):
+            self.dual_args = (qvec, svec, domain, k)
+            return [hit]
+
+    class _Embed2:
+        def embed(self, texts):
+            return [[1.0, 0.0] for _ in texts]  # one vector per input text
+
+    store = _DualStore()
+    retrieve = make_retriever(store, _Embed2(), k=3)
+    out = retrieve("efficacy", "current q", "SELECT ?")
+    assert out == [hit]
+    assert store.dual_args is not None and store.dual_args[2] == "efficacy"
+
+
+def test_make_retriever_single_channel_when_no_draft():
+    hit = Example("past q", "SELECT 1", "efficacy")
+    store = _Store([hit])  # only has .search
+    retrieve = make_retriever(store, _Embed(), k=3)
+    assert retrieve("efficacy", "q", None) == [hit]  # draft None → single channel
