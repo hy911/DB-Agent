@@ -19,10 +19,14 @@ dependencies = [
     "numpy>=1.26",
     "httpx>=0.27",
     "statsmodels>=0.14",
+    "jinja2>=3.1",
 ]
 
 [project.optional-dependencies]
 dev = ["pytest>=8.0", "pytest-asyncio>=0.24", "ruff>=0.6"]
+# PDF rendering for the Model Recommender report. Heavy native deps (GTK/Pango/
+# Cairo), so it's opt-in; without it the report is HTML-only (browser-printable).
+report = ["weasyprint>=62"]
 
 [build-system]
 requires = ["setuptools>=68"]

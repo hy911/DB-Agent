@@ -40,3 +40,19 @@ class QueryResponse(BaseModel):
     error: str | None = None
     rows: ResultRows | None = None  # top-level mirror of results[0] (back-compat)
     results: list[DomainResultModel] = []  # per-domain sections (1 or N); [] for clarify/error
+
+
+class RecommendRequest(BaseModel):
+    question: str  # the customer's model-selection brief
+    top_n: int = 3
+    format: str | None = None  # "pdf" → return application/pdf instead of JSON
+
+
+class RecommendResponse(BaseModel):
+    # models[] are plain dicts (their keys start with `model_`, which pydantic
+    # reserves as a protected field namespace — dicts sidestep that cleanly).
+    question: str
+    summary: str
+    models: list[dict[str, object]] = []
+    notes: list[str] = []
+    report_html: str

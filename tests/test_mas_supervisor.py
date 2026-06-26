@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from tests._rec_helpers import FULL_CRITERIA, FULL_GENE_MAP, RecReplica, rec_resolver
+
 from db_agent.config import Settings
 from db_agent.db import QueryResult
 from db_agent.graph.state import Deps
@@ -11,9 +13,10 @@ LAYER = load_semantic_layer(SETTINGS.semantic_layer_path)
 
 
 class _LLM:
-    """Content-aware fake: serves intent classification, domain routing, SQL gen and
-    the answer off the same client (the supervisor adds an intent call ABOVE the
-    existing domain route, so a pop-order fake on model_fast is unsafe)."""
+    """Content-aware fake serving every call the supervisor's workers make: intent
+    classification, domain routing, SQL gen, the explore answer, AND the recommender's
+    criteria + summary (the supervisor adds an intent call ABOVE the domain route, and
+    recommend now runs the real pipeline — so a pop-order fake on a model is unsafe)."""
 
     def __init__(self, *, intent: str, domain: str = "efficacy", answer: str = "ok.") -> None:
         self.intent = intent
@@ -31,7 +34,12 @@ class _LLM:
             return "NONE"  # extract_genes
         if model == SETTINGS.model_sql:
             return self.sqls.pop(0)
-        return self.answer  # model_route
+        # model_route: recommender criteria/summary, else the explore answer
+        if "extract structured selection criteria" in text:
+            return FULL_CRITERIA
+        if "scientific consultant recommending" in text:
+            return "推荐 m1。"
+        return self.answer
 
     async def complete_stream(self, model: str, messages: list[dict[str, str]]):
         if model == SETTINGS.model_route:
@@ -40,15 +48,14 @@ class _LLM:
             yield await self.complete(model, messages)
 
 
-class _Replica:
+class _Replica(RecReplica):
+    """RecReplica (fetch for the recommender) plus execute for the explore engine."""
+
     def __init__(self, script) -> None:
         self.script = list(script)
 
     def execute(self, sql, *, needs_explain, big_tables, limit=None):
         return self.script.pop(0)
-
-    def fetch(self, sql, params=()):
-        return []
 
 
 def _qr():
@@ -63,20 +70,27 @@ def _qr():
 
 
 def _deps(llm, replica):
-    return Deps(llm=llm, replica=replica, layer=LAYER, settings=SETTINGS)
+    return Deps(
+        llm=llm,
+        replica=replica,
+        layer=LAYER,
+        settings=SETTINGS,
+        resolve_gene=rec_resolver(FULL_GENE_MAP),
+    )
 
 
 async def test_supervisor_routes_explore_unchanged():
     res = await run_mas("查药效数据", deps=_deps(_LLM(intent="explore"), _Replica([_qr()])))
     assert res.status == "answered"
-    assert res.answer == "ok."  # explore worker = the plain engine, no note prepended
+    assert res.answer == "ok."  # explore worker = the plain engine, unchanged
 
 
-async def test_supervisor_recommend_stub_prepends_note_and_falls_back():
-    res = await run_mas("推荐合适的模型", deps=_deps(_LLM(intent="recommend"), _Replica([_qr()])))
+async def test_supervisor_routes_to_recommend_pipeline():
+    res = await run_mas("推荐合适的模型", deps=_deps(_LLM(intent="recommend"), _Replica([])))
     assert res.status == "answered"
-    assert res.answer.startswith("（模型推荐 Agent")  # stub note
-    assert res.answer.endswith("ok.")  # then the explore fallback answer
+    assert res.answer == "推荐 m1。"  # the recommender's summary, not the explore answer
+    assert res.result is not None and res.result.rows[0]["model_id"] == "A1"
+    assert res.results and res.results[0].domain == "recommend"
 
 
 async def test_supervisor_vdr_stub_prepends_its_note():
@@ -87,7 +101,7 @@ async def test_supervisor_vdr_stub_prepends_its_note():
 async def test_supervisor_tags_worker_in_observer():
     recs = []
     await run_mas(
-        "推荐模型", deps=_deps(_LLM(intent="recommend"), _Replica([_qr()])), observer=recs.append
+        "推荐模型", deps=_deps(_LLM(intent="recommend"), _Replica([])), observer=recs.append
     )
     assert recs and recs[-1].worker == "recommend"
 
@@ -98,14 +112,15 @@ async def test_supervisor_agent_override_skips_router():
     assert res.answer.startswith("（尽调问答 Agent")
 
 
-async def test_supervisor_stream_emits_note_then_tokens_then_final():
+async def test_supervisor_stream_recommend_emits_summary_then_final():
     events = [
         e
         async for e in run_mas_stream(
-            "推荐模型", deps=_deps(_LLM(intent="recommend"), _Replica([_qr()]))
+            "推荐模型", deps=_deps(_LLM(intent="recommend"), _Replica([]))
         )
     ]
     tokens = [e["text"] for e in events if e["type"] == "token"]
-    assert tokens[0].startswith("（模型推荐 Agent")  # note streamed first
-    assert "".join(tokens).endswith("ok.")  # explore answer streamed after
-    assert events[-1]["type"] == "final" and events[-1]["result"].status == "answered"
+    assert "".join(tokens) == "推荐 m1。"  # the summary streamed as a token
+    final = events[-1]
+    assert final["type"] == "final" and final["result"].status == "answered"
+    assert final["result"].result.rows[0]["model_id"] == "A1"

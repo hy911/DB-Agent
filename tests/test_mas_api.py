@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 
 from fastapi.testclient import TestClient
+from tests._rec_helpers import FULL_CRITERIA, FULL_GENE_MAP, RecReplica, rec_resolver
 
 from db_agent.api.app import create_app
 from db_agent.config import Settings
@@ -43,6 +44,10 @@ class _LLM:
             return "NONE"
         if model == SETTINGS.model_sql:
             return self.sqls.pop(0)
+        if "extract structured selection criteria" in text:
+            return FULL_CRITERIA
+        if "scientific consultant recommending" in text:
+            return "推荐 m1。"
         return self.answer
 
     async def complete_stream(self, model, messages):
@@ -52,15 +57,14 @@ class _LLM:
             yield await self.complete(model, messages)
 
 
-class _Replica:
+class _Replica(RecReplica):
+    """RecReplica (recommender fetch) + execute for the explore engine."""
+
     def __init__(self, script):
         self.script = list(script)
 
     def execute(self, sql, *, needs_explain, big_tables, limit=None):
         return self.script.pop(0)
-
-    def fetch(self, sql, params=()):
-        return []
 
 
 def _qr():
@@ -75,20 +79,27 @@ def _qr():
 
 
 def _client(llm, replica, settings):
-    deps = Deps(llm=llm, replica=replica, layer=LAYER, settings=settings)
+    deps = Deps(
+        llm=llm,
+        replica=replica,
+        layer=LAYER,
+        settings=settings,
+        resolve_gene=rec_resolver(FULL_GENE_MAP),
+    )
     return TestClient(create_app(deps=deps))
 
 
 def test_mas_enabled_routes_through_supervisor():
-    # intent=recommend → the recommend stub prepends its note before the data answer
-    with _client(_LLM(intent="recommend"), _Replica([_qr()]), SETTINGS_MAS) as client:
+    # intent=recommend → the supervisor runs the real recommender pipeline
+    with _client(_LLM(intent="recommend"), _Replica([]), SETTINGS_MAS) as client:
         resp = client.post("/query/stream", json={"question": "推荐合适的模型"})
         events = _sse_events(resp)
     assert resp.status_code == 200
     tokens = "".join(e["text"] for e in events if e["type"] == "token")
-    assert tokens.startswith("（模型推荐 Agent")
+    assert tokens == "推荐 m1。"  # the recommender summary streamed
     final = events[-1]
     assert final["type"] == "final" and final["payload"]["status"] == "answered"
+    assert final["payload"]["rows"]["rows"][0]["model_id"] == "A1"
 
 
 def test_mas_disabled_ignores_agent_and_uses_engine():

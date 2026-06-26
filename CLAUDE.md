@@ -228,15 +228,21 @@ src/db_agent/
                    #   →guard→execute→critic(→analyze→stats→answer if with_answer). ≥2 domains
                    #   fan out via asyncio.gather → AgentResult.results (labeled sections).
                    #   build_graph is the legacy single-domain graph (route node inside).
-  mas/             # Multi-Agent System supervisor over the query engine (Phase A skeleton,
-                   #   off unless Settings.mas_enabled). router.classify_intent (qwen-fast,
-                   #   fails open to 'explore') → supervisor.run_mas[_stream] dispatch →
-                   #   workers/: explore (delegates to run_agent[_stream], the adopted full
-                   #   agent), recommend + vdr (Phase A stubs: note + fall back to explore).
-                   #   Same AgentResult/SSE contract; tags the audit RunRecord.worker.
-  api/             # FastAPI: app.py (create_app, POST /query/stream [SSE], GET /health,
-                   #   GET /); SSE emits token/final/error events; final carries QueryResponse.
-                   #   mas_enabled → run_mas_stream (req.agent override); else run_agent_stream
+  mas/             # Multi-Agent System supervisor over the query engine (off unless
+                   #   Settings.mas_enabled). router.classify_intent (qwen-fast, fails open to
+                   #   'explore') → supervisor.run_mas[_stream] dispatch → workers/: explore
+                   #   (delegates to run_agent[_stream], the adopted full agent), recommend
+                   #   (Phase B: real recommender), vdr (Phase A stub: note + fall back to
+                   #   explore). Same AgentResult/SSE contract; tags audit RunRecord.worker.
+                   # recommender/ (Phase B): model.py (Criteria/RankedModel/Recommendation),
+                   #   scoring.py (pure additive rank), pipeline.run_recommendation (extract
+                   #   criteria → resolve genes → per-criterion candidate fetch (db/
+                   #   recommend_queries.py, parameterized) → rank → efficacy evidence →
+                   #   summary), report.py (jinja2 HTML; lazy-optional WeasyPrint PDF).
+  api/             # FastAPI: app.py (create_app, POST /query/stream [SSE], POST /recommend,
+                   #   GET /health, GET /); SSE emits token/final/error, final carries
+                   #   QueryResponse. mas_enabled → run_mas_stream (req.agent override); else
+                   #   run_agent_stream. /recommend → RecommendResponse (+report_html; ?format=pdf)
   web/             # single-file chat UI (index.html, inline CSS+JS, zero deps);
                    #   served at GET / via FileResponse; auto-charts numeric results
   observability/   # RunRecord (+result_sample) + sinks (Jsonl/Postgres/Null) +

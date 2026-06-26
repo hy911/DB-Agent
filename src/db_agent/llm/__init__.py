@@ -22,8 +22,10 @@ from db_agent.llm.agent_llm import (  # noqa: E402
     answer_stat,
     answer_stat_stream,
     answer_stream,
+    extract_criteria,
     extract_genes,
     generate_sql,
+    recommend_summary,
     request_stat,
     route,
 )
@@ -40,8 +42,10 @@ __all__ = [
     "answer_stat",
     "answer_stat_stream",
     "answer_stream",
+    "extract_criteria",
     "extract_genes",
     "generate_sql",
+    "recommend_summary",
     "request_stat",
     "route",
 ]

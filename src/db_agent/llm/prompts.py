@@ -101,6 +101,59 @@ def intent_messages(question: str) -> list[dict[str, str]]:
     ]
 
 
+def criteria_messages(
+    question: str, cancer_types: list[str], model_types: list[str]
+) -> list[dict[str, str]]:
+    """Extract structured model-selection criteria from a recommendation brief.
+
+    Output is strict JSON (parsed by Criteria.from_json, which tolerates noise).
+    cancer_type / model_type must map to the provided closed enums or be null.
+    """
+    cancers = ", ".join(cancer_types)
+    models = ", ".join(model_types)
+    system = (
+        "You extract structured selection criteria from a request to RECOMMEND mouse "
+        "tumor models. Output ONLY a JSON object, no prose, with these keys:\n"
+        '- "mutated_genes": list of gene symbols the model should carry a mutation in '
+        "(keep the user's token as written, e.g. KRAS, HER2 — they are resolved later).\n"
+        '- "expression": list of {"gene": <symbol>, "direction": "high"|"low"} for '
+        "required expression levels.\n"
+        f'- "cancer_type": ONE English histology mapped to the closest of [{cancers}], '
+        "or null. Map any subtype/Chinese/synonym to the closest listed value "
+        "(e.g. 非小细胞肺癌/NSCLC → 'Lung Carcinoma').\n"
+        f'- "model_type": ONE of [{models}] or null.\n'
+        "Use [] or null for anything the brief does not specify. "
+        "Example — for '推荐 KRAS 突变且 HER2 低表达的 PDX 肺癌模型' output: "
+        '{"mutated_genes": ["KRAS"], "expression": [{"gene": "HER2", "direction": "low"}], '
+        '"cancer_type": "Lung Carcinoma", "model_type": "PDX"}. '
+        "Output only the JSON object."
+    )
+    return [
+        {"role": "system", "content": system},
+        {"role": "user", "content": question},
+    ]
+
+
+def recommend_summary_messages(question: str, table_preview: str) -> list[dict[str, str]]:
+    """A persuasive-but-factual NL summary of the ranked recommendation table."""
+    system = (
+        "You are a scientific consultant recommending mouse tumor models to a client. "
+        "Given the client's brief and a ranked table of candidate models (with how many "
+        "of the requested criteria each matched and any historical efficacy evidence), "
+        "write a concise, professional recommendation in the SAME language as the brief. "
+        "Lead with the single best-matching model and say WHY (which criteria it met, and "
+        "cite efficacy evidence if present). Mention the runner-up(s) briefly. Use ONLY "
+        "the rows given — never invent models, scores, or drug results. If no model "
+        "matched, say so plainly and suggest relaxing a criterion. Do not output a table; "
+        "the table is shown separately."
+    )
+    user = f"Client brief: {question}\n\nRanked candidates:\n{table_preview}"
+    return [
+        {"role": "system", "content": system},
+        {"role": "user", "content": user},
+    ]
+
+
 def route_messages(question: str, domains: list[Domain]) -> list[dict[str, str]]:
     listing = "\n".join(f"- {d.name}: {d.label}" for d in domains)
     system = (

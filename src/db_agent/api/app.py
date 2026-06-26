@@ -17,12 +17,14 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import APIRouter, FastAPI, Request
-from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.responses import FileResponse, JSONResponse, Response, StreamingResponse
 
 from db_agent.api.schemas import (
     DomainResultModel,
     QueryRequest,
     QueryResponse,
+    RecommendRequest,
+    RecommendResponse,
     ResultRows,
 )
 from db_agent.config import Settings, get_settings
@@ -33,6 +35,8 @@ from db_agent.graph import run_agent_stream
 from db_agent.graph.state import AgentResult, Deps
 from db_agent.llm import LiteLLMClient
 from db_agent.mas import run_mas_stream
+from db_agent.mas.recommender import run_recommendation
+from db_agent.mas.recommender.report import render_html, render_pdf
 from db_agent.observability.observer import JsonlObserver, NullObserver, Observer
 from db_agent.observability.postgres import PostgresObserver
 from db_agent.semantic import load_semantic_layer
@@ -106,6 +110,49 @@ async def query_stream(req: QueryRequest, request: Request) -> StreamingResponse
         gen(),
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
+@router.post("/recommend")
+async def recommend(req: RecommendRequest, request: Request):
+    """Run the Model Recommender and return the ranked models + an HTML report
+    (or a PDF when format='pdf' and WeasyPrint is installed)."""
+    deps: Deps = request.app.state.deps
+    rec = await run_recommendation(req.question, deps=deps, top_n=req.top_n)
+    html = render_html(rec)
+    if (req.format or "").lower() == "pdf":
+        pdf = render_pdf(html)
+        if pdf is None:
+            return JSONResponse(
+                status_code=501,
+                content={
+                    "detail": "PDF rendering unavailable; install the 'report' extra (weasyprint)"
+                },
+            )
+        return Response(
+            content=pdf,
+            media_type="application/pdf",
+            headers={"Content-Disposition": "attachment; filename=recommendation.pdf"},
+        )
+    models = [
+        {
+            "model_uuid": m.model_uuid,
+            "model_id": m.model_id,
+            "model_name": m.model_name,
+            "model_type": m.model_type,
+            "cancer_type": m.cancer_type,
+            "score": m.score,
+            "matched": list(m.matched),
+            "evidence": list(m.evidence),
+        }
+        for m in rec.models
+    ]
+    return RecommendResponse(
+        question=req.question,
+        summary=rec.summary,
+        models=models,
+        notes=list(rec.notes),
+        report_html=html,
     )
 
 

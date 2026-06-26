@@ -73,6 +73,30 @@ async def extract_genes(client: LLMClient, settings: Settings, question: str) ->
     return [g.strip() for g in text.split(",") if g.strip()]
 
 
+async def extract_criteria(
+    client: LLMClient,
+    settings: Settings,
+    question: str,
+    cancer_types: list[str],
+    model_types: list[str],
+) -> str:
+    """Return the raw JSON criteria string (parsed by Criteria.from_json)."""
+    text = await client.complete(
+        settings.model_route,
+        prompts.criteria_messages(question, cancer_types, model_types),
+    )
+    return _strip_fences(text).strip()
+
+
+async def recommend_summary(
+    client: LLMClient, settings: Settings, question: str, table_preview: str
+) -> str:
+    text = await client.complete(
+        settings.model_route, prompts.recommend_summary_messages(question, table_preview)
+    )
+    return text.strip()
+
+
 async def generate_sql(
     client: LLMClient,
     settings: Settings,
