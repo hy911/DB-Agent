@@ -40,6 +40,9 @@ class RunRecord:
     latency_ms: float | None = None
     result_sample: list[dict[str, object]] | None = None
     feedback: str | None = None  # placeholder; reserved for future user feedback
+    # Which MAS worker handled the run (explore | recommend | vdr). None for a
+    # direct (non-MAS) run_agent call; set by the supervisor's tagged observer.
+    worker: str | None = None
 
     @classmethod
     def from_state(

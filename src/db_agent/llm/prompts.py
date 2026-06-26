@@ -70,6 +70,37 @@ _ANSWER_SYSTEM = (
 )
 
 
+def intent_messages(question: str) -> list[dict[str, str]]:
+    """MAS top-level intent router: pick which *worker* handles the request.
+
+    This is ABOVE the domain router — it classifies the kind of task/audience, not
+    the data domain. Three workers: `explore` (ad-hoc data query & analysis — the
+    default), `recommend` (pick/recommend suitable mouse models for a target or
+    indication), `vdr` (due-diligence factual Q&A: take rate, latency, model facts).
+    """
+    system = (
+        "You classify a user's request for a mouse tumor-model database assistant "
+        "into exactly ONE worker. Reply with a single lowercase word, nothing else.\n"
+        "- recommend: the user wants you to PICK or RECOMMEND suitable mouse models "
+        "for a drug target, mutation, expression profile or indication, to use for "
+        "validation (e.g. '推荐适合 HER2 低表达的 ADC 验证模型', '帮我选几个 KRAS G12C "
+        "突变的 PDX 模型做药效', 'which models fit an EGFR-mutant NSCLC program').\n"
+        "- vdr: a due-diligence / business factual question about a model's "
+        "characteristics or historical conclusions — take rate (成瘤率), latency "
+        "(潜伏期), strain, past efficacy summary (e.g. 'CT26 的成瘤率是多少', "
+        "'这个模型平均潜伏期多久', 'what was the historical efficacy of MC38').\n"
+        "- explore: anything else — an ad-hoc data query, listing, count, "
+        "aggregation, statistic or curve over expression / mutation / efficacy / "
+        "modeling data (e.g. '查 EGFR 在所有 PDX 里的表达量', 'CT26 的阳性药数据', "
+        "'画一下生存曲线'), AND greetings / capability / out-of-scope questions.\n"
+        "When unsure, answer 'explore'. Reply with one of: recommend, vdr, explore."
+    )
+    return [
+        {"role": "system", "content": system},
+        {"role": "user", "content": question},
+    ]
+
+
 def route_messages(question: str, domains: list[Domain]) -> list[dict[str, str]]:
     listing = "\n".join(f"- {d.name}: {d.label}" for d in domains)
     system = (

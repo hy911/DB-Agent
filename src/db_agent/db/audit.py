@@ -55,6 +55,7 @@ _COLUMNS: tuple[str, ...] = (
     "latency_ms",
     "result_sample",
     "feedback",
+    "worker",
 )
 
 _DDL = """CREATE TABLE IF NOT EXISTS {tbl} (
@@ -77,7 +78,8 @@ _DDL = """CREATE TABLE IF NOT EXISTS {tbl} (
     error text,
     latency_ms double precision,
     result_sample jsonb,
-    feedback text
+    feedback text,
+    worker text
 )"""
 
 
@@ -118,8 +120,17 @@ class AuditLog:
             )
             for col in ("ts", "status", "domain")
         ]
+        # Columns added after a table was first created (e.g. `worker`): bring an
+        # existing table up to date. ADD COLUMN IF NOT EXISTS is a no-op otherwise.
+        alters = [
+            sql.SQL("ALTER TABLE {tbl} ADD COLUMN IF NOT EXISTS {col} text").format(
+                tbl=tbl, col=sql.Identifier("worker")
+            )
+        ]
         with self.pool.connection() as conn:
             conn.execute(ddl)
+            for alter in alters:
+                conn.execute(alter)
             for idx in indexes:
                 conn.execute(idx)
 

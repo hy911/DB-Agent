@@ -32,6 +32,7 @@ from db_agent.examples.retriever import default_retriever
 from db_agent.graph import run_agent_stream
 from db_agent.graph.state import AgentResult, Deps
 from db_agent.llm import LiteLLMClient
+from db_agent.mas import run_mas_stream
 from db_agent.observability.observer import JsonlObserver, NullObserver, Observer
 from db_agent.observability.postgres import PostgresObserver
 from db_agent.semantic import load_semantic_layer
@@ -65,20 +66,27 @@ async def query_stream(req: QueryRequest, request: Request) -> StreamingResponse
     deps: Deps = request.app.state.deps
     observer = request.app.state.observer
 
+    def _stream() -> AsyncIterator[dict]:
+        # MAS on: route through the supervisor (intent → explore/recommend/vdr),
+        # same event contract. Off: call the engine directly (unchanged behavior).
+        if deps.settings.mas_enabled:
+            return run_mas_stream(req.question, deps=deps, observer=observer, agent=req.agent)
+        return run_agent_stream(
+            req.question,
+            llm=deps.llm,
+            replica=deps.replica,
+            layer=deps.layer,
+            settings=deps.settings,
+            observer=observer,
+            resolve_gene=deps.resolve_gene,
+            run_sandbox=deps.run_sandbox,
+            run_stat=deps.run_stat,
+            retrieve_examples=deps.retrieve_examples,
+        )
+
     async def gen() -> AsyncIterator[str]:
         try:
-            async for event in run_agent_stream(
-                req.question,
-                llm=deps.llm,
-                replica=deps.replica,
-                layer=deps.layer,
-                settings=deps.settings,
-                observer=observer,
-                resolve_gene=deps.resolve_gene,
-                run_sandbox=deps.run_sandbox,
-                run_stat=deps.run_stat,
-                retrieve_examples=deps.retrieve_examples,
-            ):
+            async for event in _stream():
                 if event["type"] == "final":
                     yield _sse(
                         {"type": "final", "payload": _to_response(event["result"]).model_dump()}

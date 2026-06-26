@@ -7,6 +7,9 @@ from pydantic import BaseModel
 
 class QueryRequest(BaseModel):
     question: str
+    # Optional MAS worker override: explore | recommend | vdr. None/"auto" lets the
+    # supervisor's intent router decide. Ignored unless Settings.mas_enabled.
+    agent: str | None = None
 
 
 class ResultRows(BaseModel):

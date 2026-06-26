@@ -46,6 +46,12 @@ class Settings(BaseSettings):
     default_limit: int = 1000
     max_limit: int = 10_000
 
+    # --- multi-agent system (MAS) ---
+    # When True, /query/stream routes through the MAS supervisor (intent router →
+    # explore | recommend | vdr worker) instead of calling run_agent directly.
+    # Off by default so the endpoint behaves exactly as before until opted in.
+    mas_enabled: bool = False
+
     # --- self-correction loop ---
     max_sql_retries: int = 3
     # Data-aware self-correction: when a SELECT runs clean but returns 0 rows,
