@@ -108,20 +108,19 @@ def test_mas_enabled_routes_through_supervisor():
     assert final["payload"]["rows"]["rows"][0]["model_id"] == "A1"
 
 
-def test_mas_disabled_ignores_agent_and_uses_engine():
-    # default settings: the supervisor is bypassed, no MAS note appears
+def test_mas_disabled_uses_engine():
+    # default settings: the supervisor is bypassed, the engine answers directly
     with _client(_LLM(intent="recommend"), _Replica([_qr()]), SETTINGS) as client:
-        resp = client.post("/query/stream", json={"question": "查药效", "agent": "recommend"})
+        resp = client.post("/query/stream", json={"question": "查药效"})
         events = _sse_events(resp)
     tokens = "".join(e["text"] for e in events if e["type"] == "token")
-    assert "建设中" not in tokens
     assert tokens == "ok."
 
 
-def test_mas_agent_override_via_request_field():
-    # agent='vdr' forces the vdr worker; with a matching card it grounds + cites
-    with _client(_LLM(intent="explore"), _Replica([]), SETTINGS_MAS, _VDR_CARDS) as client:
-        resp = client.post("/query/stream", json={"question": "CT26 潜伏期", "agent": "vdr"})
+def test_mas_routes_vdr_by_intent():
+    # purely semantic auto-routing (no agent field): intent=vdr + a matching card
+    with _client(_LLM(intent="vdr"), _Replica([]), SETTINGS_MAS, _VDR_CARDS) as client:
+        resp = client.post("/query/stream", json={"question": "CT26 潜伏期"})
         events = _sse_events(resp)
     tokens = "".join(e["text"] for e in events if e["type"] == "token")
     assert "[CT26]" in tokens

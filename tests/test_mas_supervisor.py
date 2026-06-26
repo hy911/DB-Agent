@@ -122,12 +122,9 @@ async def test_supervisor_tags_worker_in_observer():
     assert recs and recs[-1].worker == "recommend"
 
 
-async def test_supervisor_agent_override_skips_router():
-    # explicit agent='vdr' overrides the (here explore-returning) classifier; with a
-    # matching card the vdr worker answers (proving the override took effect)
-    res = await run_mas(
-        "CT26 潜伏期", deps=_deps(_LLM(intent="explore"), _Replica([]), _VDR_CARDS), agent="vdr"
-    )
+async def test_supervisor_routes_purely_by_intent():
+    # routing is fully automatic: the classifier alone decides the worker (no override)
+    res = await run_mas("CT26 潜伏期", deps=_deps(_LLM(intent="vdr"), _Replica([]), _VDR_CARDS))
     assert "[CT26]" in res.answer and res.results[0].domain == "vdr"
 
 

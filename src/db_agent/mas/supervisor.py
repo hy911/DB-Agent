@@ -13,7 +13,7 @@ from dataclasses import replace
 
 from db_agent.graph import AgentResult
 from db_agent.graph.state import Deps
-from db_agent.mas.router import WORKER_KINDS, classify_intent
+from db_agent.mas.router import classify_intent
 from db_agent.mas.workers import (
     explore_worker,
     explore_worker_stream,
@@ -48,24 +48,17 @@ def _tagged_observer(observer: Observer | None, worker: str) -> Observer | None:
     return wrapped
 
 
-async def _resolve_kind(deps: Deps, question: str, agent: str | None) -> str:
-    """An explicit, valid `agent` overrides the router; else classify (→ explore)."""
-    if agent in WORKER_KINDS:
-        return agent  # type: ignore[return-value]
-    return await classify_intent(deps.llm, deps.settings, question)
-
-
 async def run_mas(
-    question: str, *, deps: Deps, observer: Observer | None = None, agent: str | None = None
+    question: str, *, deps: Deps, observer: Observer | None = None
 ) -> AgentResult:
-    kind = await _resolve_kind(deps, question, agent)
+    kind = await classify_intent(deps.llm, deps.settings, question)
     return await _WORKERS[kind](question, deps=deps, observer=_tagged_observer(observer, kind))
 
 
 async def run_mas_stream(
-    question: str, *, deps: Deps, observer: Observer | None = None, agent: str | None = None
+    question: str, *, deps: Deps, observer: Observer | None = None
 ) -> AsyncIterator[dict]:
-    kind = await _resolve_kind(deps, question, agent)
+    kind = await classify_intent(deps.llm, deps.settings, question)
     async for event in _STREAM_WORKERS[kind](
         question, deps=deps, observer=_tagged_observer(observer, kind)
     ):

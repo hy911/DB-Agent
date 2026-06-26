@@ -75,7 +75,7 @@ async def query_stream(req: QueryRequest, request: Request) -> StreamingResponse
         # MAS on: route through the supervisor (intent → explore/recommend/vdr),
         # same event contract. Off: call the engine directly (unchanged behavior).
         if deps.settings.mas_enabled:
-            return run_mas_stream(req.question, deps=deps, observer=observer, agent=req.agent)
+            return run_mas_stream(req.question, deps=deps, observer=observer)
         return run_agent_stream(
             req.question,
             llm=deps.llm,

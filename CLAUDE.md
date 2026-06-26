@@ -249,8 +249,9 @@ src/db_agent/
                    #   falls back to the live explore engine (same for_bd='yes' rule).
   api/             # FastAPI: app.py (create_app, POST /query/stream [SSE], POST /recommend,
                    #   GET /health, GET /); SSE emits token/final/error, final carries
-                   #   QueryResponse. mas_enabled → run_mas_stream (req.agent override); else
-                   #   run_agent_stream. /recommend → RecommendResponse (+report_html; ?format=pdf)
+                   #   QueryResponse. mas_enabled → run_mas_stream (fully automatic intent
+                   #   routing, no override); else run_agent_stream. /recommend →
+                   #   RecommendResponse (+report_html; ?format=pdf)
   web/             # single-file chat UI (index.html, inline CSS+JS, zero deps);
                    #   served at GET / via FileResponse; auto-charts numeric results
   observability/   # RunRecord (+result_sample) + sinks (Jsonl/Postgres/Null) +
