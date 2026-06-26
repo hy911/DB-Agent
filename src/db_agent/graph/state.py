@@ -17,6 +17,7 @@ from db_agent.sandbox.engine import DuckDBSandbox
 from db_agent.sandbox.stats import StatResult
 from db_agent.sandbox.stats import run_stat as _default_run_stat
 from db_agent.semantic.model import SemanticLayer
+from db_agent.vdr.retriever import CardRetriever, _no_cards
 
 _default_run_sandbox = DuckDBSandbox().run
 
@@ -141,3 +142,5 @@ class Deps:
     )
     run_stat: Callable[[list[str], list[dict[str, object]], str], StatResult] = _default_run_stat
     retrieve_examples: Retriever = _no_examples
+    # VDR fact-card retrieval (used only by the vdr worker; default no-op → live fallback).
+    retrieve_cards: CardRetriever = _no_cards

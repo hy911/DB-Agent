@@ -40,6 +40,7 @@ from db_agent.mas.recommender.report import render_html, render_pdf
 from db_agent.observability.observer import JsonlObserver, NullObserver, Observer
 from db_agent.observability.postgres import PostgresObserver
 from db_agent.semantic import load_semantic_layer
+from db_agent.vdr import default_card_retriever
 
 logger = logging.getLogger("db_agent.api")
 
@@ -219,6 +220,7 @@ def create_app(deps: Deps | None = None, observer: Observer | None = None) -> Fa
                 layer=load_semantic_layer(s.semantic_layer_path),
                 settings=s,
                 retrieve_examples=default_retriever(s),
+                retrieve_cards=default_card_retriever(s),
             )
             obs, audit = _select_observer(s)
             app.state.observer = obs

@@ -232,13 +232,20 @@ src/db_agent/
                    #   Settings.mas_enabled). router.classify_intent (qwen-fast, fails open to
                    #   'explore') → supervisor.run_mas[_stream] dispatch → workers/: explore
                    #   (delegates to run_agent[_stream], the adopted full agent), recommend
-                   #   (Phase B: real recommender), vdr (Phase A stub: note + fall back to
-                   #   explore). Same AgentResult/SSE contract; tags audit RunRecord.worker.
+                   #   (Phase B: real recommender), vdr (Phase C: card-RAG, else live
+                   #   fallback). Same AgentResult/SSE contract; tags audit RunRecord.worker.
                    # recommender/ (Phase B): model.py (Criteria/RankedModel/Recommendation),
                    #   scoring.py (pure additive rank), pipeline.run_recommendation (extract
                    #   criteria → resolve genes → per-criterion candidate fetch (db/
                    #   recommend_queries.py, parameterized) → rank → efficacy evidence →
                    #   summary), report.py (jinja2 HTML; lazy-optional WeasyPrint PDF).
+  vdr/             # VDR QA card-RAG (Phase C, off until Settings.vdr_index_path). store.py
+                   #   (CardStore cosine .npz), build.py (OFFLINE: de-sensitized FactCards from
+                   #   the DB — public id, coarse attrs, avg latency, efficacy summary; never
+                   #   the uuid/raw rows — + CLI), retriever.py (embed+search+threshold; no-op
+                   #   default → live fallback). Injected via Deps.retrieve_cards. The vdr
+                   #   worker grounds an answer (cited) when a card clears the threshold, else
+                   #   falls back to the live explore engine (same for_bd='yes' rule).
   api/             # FastAPI: app.py (create_app, POST /query/stream [SSE], POST /recommend,
                    #   GET /health, GET /); SSE emits token/final/error, final carries
                    #   QueryResponse. mas_enabled → run_mas_stream (req.agent override); else

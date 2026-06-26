@@ -28,6 +28,8 @@ from db_agent.llm.agent_llm import (  # noqa: E402
     recommend_summary,
     request_stat,
     route,
+    vdr_answer,
+    vdr_answer_stream,
 )
 from db_agent.llm.client import LiteLLMClient, LLMClient  # noqa: E402
 
@@ -48,4 +50,6 @@ __all__ = [
     "recommend_summary",
     "request_stat",
     "route",
+    "vdr_answer",
+    "vdr_answer_stream",
 ]

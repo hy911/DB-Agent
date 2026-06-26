@@ -97,6 +97,20 @@ async def recommend_summary(
     return text.strip()
 
 
+async def vdr_answer(client: LLMClient, settings: Settings, question: str, cards: list[str]) -> str:
+    text = await client.complete(settings.model_route, prompts.vdr_answer_messages(question, cards))
+    return text.strip()
+
+
+async def vdr_answer_stream(
+    client: LLMClient, settings: Settings, question: str, cards: list[str]
+) -> AsyncIterator[str]:
+    async for piece in client.complete_stream(
+        settings.model_route, prompts.vdr_answer_messages(question, cards)
+    ):
+        yield piece
+
+
 async def generate_sql(
     client: LLMClient,
     settings: Settings,

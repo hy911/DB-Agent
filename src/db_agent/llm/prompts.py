@@ -154,6 +154,25 @@ def recommend_summary_messages(question: str, table_preview: str) -> list[dict[s
     ]
 
 
+def vdr_answer_messages(question: str, cards: list[str]) -> list[dict[str, str]]:
+    """Grounded answer for a due-diligence question, using ONLY de-sensitized cards."""
+    rendered = "\n".join(cards)
+    system = (
+        "You answer due-diligence questions about mouse tumor models for a business-"
+        "development context, using ONLY the provided de-sensitized fact cards. Cite the "
+        "model_id(s) you relied on in square brackets, e.g. [CT26]. Use ONLY numbers and "
+        "facts present in the cards — never invent or estimate. If the cards do not contain "
+        "the answer (for example a metric like 成瘤率/take rate that is not shown), say "
+        "plainly that the information is not available in the provided materials and suggest "
+        "asking the data team. Reply in the SAME language as the question; be concise."
+    )
+    user = f"Question: {question}\n\nFact cards:\n{rendered}"
+    return [
+        {"role": "system", "content": system},
+        {"role": "user", "content": user},
+    ]
+
+
 def route_messages(question: str, domains: list[Domain]) -> list[dict[str, str]]:
     listing = "\n".join(f"- {d.name}: {d.label}" for d in domains)
     system = (

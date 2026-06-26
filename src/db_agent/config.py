@@ -52,6 +52,14 @@ class Settings(BaseSettings):
     # Off by default so the endpoint behaves exactly as before until opted in.
     mas_enabled: bool = False
 
+    # --- VDR QA fact-card RAG (off until an index is built) ---
+    # When a card index exists, the vdr worker answers due-diligence questions from
+    # de-sensitized cards (with citations); below the threshold it falls back to the
+    # live engine. Build the index offline with `python -m db_agent.vdr.build`.
+    vdr_index_path: Path | None = None
+    vdr_top_k: int = 3
+    vdr_score_threshold: float = 0.3
+
     # --- self-correction loop ---
     max_sql_retries: int = 3
     # Data-aware self-correction: when a SELECT runs clean but returns 0 rows,

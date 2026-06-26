@@ -10,9 +10,11 @@ from db_agent.config import Settings
 from db_agent.db import QueryResult
 from db_agent.graph.state import Deps
 from db_agent.semantic import load_semantic_layer
+from db_agent.vdr.model import FactCard
 
 SETTINGS = Settings(_env_file=None)
 SETTINGS_MAS = Settings(_env_file=None, mas_enabled=True)
+_VDR_CARDS = [FactCard("CT26", "CT26 (Colorectal Carcinoma, CDX)", "平均潜伏期约 8 天。")]
 LAYER = load_semantic_layer(SETTINGS.semantic_layer_path)
 
 
@@ -48,11 +50,14 @@ class _LLM:
             return FULL_CRITERIA
         if "scientific consultant recommending" in text:
             return "推荐 m1。"
+        if "due-diligence questions" in text:
+            return "潜伏期约 8 天 [CT26]。"
         return self.answer
 
     async def complete_stream(self, model, messages):
+        text = " ".join(m["content"] for m in messages)
         if model == SETTINGS.model_route:
-            yield self.answer
+            yield "潜伏期约 8 天 [CT26]。" if "due-diligence questions" in text else self.answer
         else:
             yield await self.complete(model, messages)
 
@@ -78,13 +83,14 @@ def _qr():
     )
 
 
-def _client(llm, replica, settings):
+def _client(llm, replica, settings, cards=()):
     deps = Deps(
         llm=llm,
         replica=replica,
         layer=LAYER,
         settings=settings,
         resolve_gene=rec_resolver(FULL_GENE_MAP),
+        retrieve_cards=lambda q: list(cards),
     )
     return TestClient(create_app(deps=deps))
 
@@ -113,9 +119,9 @@ def test_mas_disabled_ignores_agent_and_uses_engine():
 
 
 def test_mas_agent_override_via_request_field():
-    # agent='vdr' in the request forces the vdr worker regardless of the classifier
-    with _client(_LLM(intent="explore"), _Replica([_qr()]), SETTINGS_MAS) as client:
-        resp = client.post("/query/stream", json={"question": "q", "agent": "vdr"})
+    # agent='vdr' forces the vdr worker; with a matching card it grounds + cites
+    with _client(_LLM(intent="explore"), _Replica([]), SETTINGS_MAS, _VDR_CARDS) as client:
+        resp = client.post("/query/stream", json={"question": "CT26 潜伏期", "agent": "vdr"})
         events = _sse_events(resp)
     tokens = "".join(e["text"] for e in events if e["type"] == "token")
-    assert tokens.startswith("（尽调问答 Agent")
+    assert "[CT26]" in tokens
