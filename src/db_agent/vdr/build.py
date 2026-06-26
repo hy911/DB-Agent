@@ -27,11 +27,14 @@ _MODEL_LIMIT = 5000
 
 
 def _fmt(value: object, suffix: str = "") -> str | None:
+    """Format a numeric metric to one decimal. DB aggregates (AVG/MAX) come back as
+    Decimal, not float, so coerce via float rather than isinstance-checking float."""
     if value is None:
         return None
-    if isinstance(value, float):
-        return f"{value:.1f}{suffix}"
-    return f"{value}{suffix}"
+    try:
+        return f"{float(value):.1f}{suffix}"
+    except (TypeError, ValueError):
+        return f"{value}{suffix}"
 
 
 def _card_text(attrs: dict[str, object], latency: object, n_drugs: object, best_tgi: object) -> str:

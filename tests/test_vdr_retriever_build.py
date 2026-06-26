@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+from decimal import Decimal
+
 from db_agent.config import Settings
-from db_agent.vdr.build import build_cards
+from db_agent.vdr.build import _card_text, build_cards
 from db_agent.vdr.model import FactCard
 from db_agent.vdr.retriever import _no_cards, default_card_retriever, make_card_retriever
 
@@ -72,3 +74,15 @@ def test_build_cards_assembles_desensitized_fact_text():
     assert "u1" not in c.text  # internal uuid never leaks into the card
     assert "Colorectal Carcinoma" in c.title
     assert "潜伏期约 8.0 天" in c.text and "12 个药物" in c.text and "TGI 95.0%" in c.text
+
+
+def test_card_text_formats_decimal_metrics_to_one_dp():
+    # DB AVG/MAX return Decimal — must not render as 11.0000000000000000
+    text = _card_text(
+        {"cancer_type": "Myeloma", "model_type": "HISCDX"},
+        Decimal("11.0000000000000000"),
+        5,
+        Decimal("63.814"),
+    )
+    assert "11.0 天" in text and "TGI 63.8%" in text
+    assert "0000" not in text
