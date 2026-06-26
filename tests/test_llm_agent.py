@@ -168,3 +168,28 @@ async def test_answer_uses_model_route_and_passes_through():
     out = await answer(c, SETTINGS, "how many?", "SELECT count(*) AS n", res)
     assert out == "There are 3 models."
     assert c.last_model == "qwen-main"
+
+
+async def test_answer_prefixes_authoritative_count_for_multirow_list():
+    # the LLM undercounts a multi-row listing → the system states the true count
+    c = _ScriptedClient("涉及多种药物。")
+    res = QueryResult(
+        columns=["drug_name"],
+        rows=[{"drug_name": "x"}] * 5,
+        rowcount=48,
+        truncated=False,
+        sql="SELECT drug_name FROM model_efficacy_info",
+        elapsed_ms=1.0,
+    )
+    out = await answer(c, SETTINGS, "CT26的阳性药数据", "SELECT ...", res, prefix_count=True)
+    assert out.startswith("共查询到 48 条记录。")  # authoritative count, language-aware
+    assert "涉及多种药物。" in out
+
+
+async def test_answer_no_prefix_for_single_row_aggregate():
+    c = _ScriptedClient("共有 380 个 PDX 模型。")
+    res = QueryResult(
+        columns=["n"], rows=[{"n": 380}], rowcount=1, truncated=False, sql="s", elapsed_ms=1.0
+    )
+    out = await answer(c, SETTINGS, "多少PDX模型", "s", res, prefix_count=True)
+    assert out == "共有 380 个 PDX 模型。"  # no "1 条记录" prefix for an aggregate

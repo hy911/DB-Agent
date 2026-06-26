@@ -273,8 +273,15 @@ async def answer_node(state: AgentState, deps: Deps) -> dict:
                 deps.llm, deps.settings, state["question"], state["analysis_sql"], state["analysis"]
             )
         else:
+            # Raw-result listing: the system states the authoritative row count
+            # (the LLM undercounts a multi-row list); analyze/stat branches don't.
             gen = llm_answer_stream(
-                deps.llm, deps.settings, state["question"], state["secured_sql"], state["result"]
+                deps.llm,
+                deps.settings,
+                state["question"],
+                state["secured_sql"],
+                state["result"],
+                prefix_count=True,
             )
         parts: list[str] = []
         async for piece in gen:

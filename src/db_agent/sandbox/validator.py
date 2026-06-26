@@ -79,4 +79,21 @@ def validate_analysis_sql(sql: str) -> exp.Expression:
                 retryable=False,
             )
 
+    # Analysis must COMPUTE/RESHAPE (aggregate, GROUP BY), never silently drop rows.
+    # A pure row-filter (a WHERE/HAVING with no aggregation) would make the answer
+    # describe a different, smaller row set than the result table the user sees —
+    # e.g. `SELECT * FROM result WHERE drug_name NOT IN ('vehicle', ...)` turning
+    # "CT26的阳性药数据" (48 rows) into 11. The user's filtering belongs in the main
+    # SQL; reject it so the agent answers from the real result.
+    has_group = ast.args.get("group") is not None
+    has_agg = next(ast.find_all(exp.AggFunc), None) is not None
+    has_filter = ast.args.get("where") is not None or ast.args.get("having") is not None
+    if has_filter and not (has_agg or has_group):
+        raise GuardError(
+            "analysis_row_filter_only",
+            "analysis may not just filter rows; it must aggregate or reshape "
+            "(row filtering belongs in the main SQL)",
+            retryable=False,
+        )
+
     return ast

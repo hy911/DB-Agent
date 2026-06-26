@@ -55,6 +55,11 @@ _ANSWER_SYSTEM = (
     "When you state how many results there are, use EXACTLY the authoritative row "
     "count given to you — never recount the preview rows, estimate, or merge/"
     "de-duplicate variants on your own; the preview may show only a sample. "
+    "Do NOT exclude or subset rows when stating that total: EVERY returned row "
+    "counts, including control / vehicle / placebo rows — the SQL already returned "
+    "exactly the rows that answer the question, so the headline total always equals "
+    "the authoritative row count. You may describe sub-groups (e.g. how many are "
+    "treatment vs control), but the stated total must be that exact number. "
     "Do NOT enumerate a long list item by item: when there are many rows or a "
     "column holds a long list, give that authoritative count and a few "
     "representative examples, and note that the full result is shown in the table "
@@ -176,8 +181,13 @@ def analysis_messages(question: str, columns: list[str], rows_preview: str) -> l
         "p-values, ANOVA, regression, survival): if the question needs a statistical "
         "test, reply with the single word NONE and let the dedicated stats step run "
         "it. If the rows already answer the question as-is, also reply NONE. "
-        "Otherwise reply with exactly one SELECT over `result` (descriptive "
-        "aggregation / pivot / correlation / quantiles), using only the `result` "
+        "NEVER just filter or drop rows: a plain `SELECT * FROM result WHERE …` that "
+        "only excludes rows (e.g. removing vehicle / control rows, or keeping one "
+        "drug/model) is NOT post-processing — the row filtering already happened in the "
+        "main SQL, and dropping rows here would contradict the result the user sees. If "
+        "the user just wants to see the data, reply NONE. "
+        "Otherwise reply with exactly one SELECT over `result` that AGGREGATES or "
+        "RESHAPES (GROUP BY / pivot / correlation / quantiles), using only the `result` "
         "table and no file or external functions. Reply with the SQL or NONE and "
         "nothing else."
     )
@@ -245,9 +255,21 @@ def answer_messages(
     rows_preview: str,
     rowcount: int | None = None,
     truncated: bool = False,
+    count_prefixed: bool = False,
 ) -> list[dict[str, str]]:
     count_line = ""
-    if rowcount is not None:
+    if count_prefixed and rowcount is not None:
+        # The system already prepended an authoritative "N records" line, so the LLM
+        # must NOT state its own total (it tends to undercount a multi-row list to the
+        # number of distinct drugs/models). Free it to describe instead.
+        count_line = (
+            f"\n\nA line stating the total ({rowcount} records) has ALREADY been shown to "
+            f"the user. Do NOT state any record count or total yourself — only describe the "
+            f"rows: notable drugs / values and patterns, with a few representative examples. "
+            f"If you mention how many distinct drugs / models there are, label it as '…种', "
+            f"never as the record total."
+        )
+    elif rowcount is not None:
         if truncated:
             count_line = (
                 f"\n\nAuthoritative total rows = {rowcount} (capped by LIMIT). Report it "
@@ -256,9 +278,15 @@ def answer_messages(
             )
         else:
             count_line = (
-                f"\n\nAuthoritative total rows = {rowcount}. Use this exact number "
-                f"verbatim when stating how many results there are; do not recount or "
-                f"de-duplicate. The rows below may be a preview sample, not the full set."
+                f"\n\nIMPORTANT — the SQL returned exactly {rowcount} result rows; each row "
+                f"is one record, and these {rowcount} records ARE the complete answer. When "
+                f"you state how many records / 条 / results there are, you MUST say {rowcount}. "
+                f"This is NOT the same as the number of distinct drugs or models: do not "
+                f"collapse the {rowcount} records down to a count of unique drug names, and "
+                f"do not drop vehicle / control / 对照 rows — the question's wording (e.g. "
+                f"'阳性药数据') never licenses that. You MAY separately note how many distinct "
+                f"drugs there are as a '…种药物' figure, but the record total stays {rowcount}. "
+                f"The rows below are only a preview sample of the {rowcount}."
             )
     user = f"Question: {question}\n\nSQL run:\n{sql}{count_line}\n\nResult rows:\n{rows_preview}"
     return [

@@ -134,19 +134,41 @@ def _format_stat(stat: StatResult) -> str:
     return "\n".join(lines)
 
 
+def _record_count_prefix(question: str, result: QueryResult) -> str:
+    """A deterministic, language-aware "N records" lead for a multi-row result.
+
+    The answer LLM reliably undercounts a multi-row data listing (it reports the
+    number of distinct drugs, or the treatment rows it sees in the preview, instead
+    of the true row count — e.g. "CT26的阳性药数据" → 11 instead of 48). So the
+    system states the authoritative count itself. Skipped for single-row results
+    (an aggregate value like "380 PDX models" — "1 record" would be nonsense)."""
+    if result.rowcount <= 1:
+        return ""
+    zh = any("一" <= c <= "鿿" for c in question)
+    n = result.rowcount
+    if result.truncated:
+        return f"共查询到至少 {n} 条记录。\n\n" if zh else f"Found at least {n} records.\n\n"
+    return f"共查询到 {n} 条记录。\n\n" if zh else f"Found {n} records.\n\n"
+
+
 async def answer(
     client: LLMClient,
     settings: Settings,
     question: str,
     sql: str,
     result: QueryResult,
+    *,
+    prefix_count: bool = False,
 ) -> str:
     preview = _rows_preview(result)
+    prefix = _record_count_prefix(question, result) if prefix_count else ""
     text = await client.complete(
         settings.model_route,
-        prompts.answer_messages(question, sql, preview, result.rowcount, result.truncated),
+        prompts.answer_messages(
+            question, sql, preview, result.rowcount, result.truncated, count_prefixed=bool(prefix)
+        ),
     )
-    return text.strip()
+    return (prefix + text).strip()
 
 
 async def answer_stream(
@@ -155,12 +177,23 @@ async def answer_stream(
     question: str,
     sql: str,
     result: QueryResult,
+    *,
+    prefix_count: bool = False,
 ) -> AsyncIterator[str]:
-    """Token-yielding twin of `answer` — same prompt/model, streamed for live display."""
+    """Token-yielding twin of `answer` — same prompt/model, streamed for live display.
+
+    When `prefix_count` is set, an authoritative "N records" line is yielded first
+    (deterministic, matches the result table) and the LLM is told not to restate a
+    total — see `_record_count_prefix` and `answer_messages(count_prefixed=...)`."""
     preview = _rows_preview(result)
+    prefix = _record_count_prefix(question, result) if prefix_count else ""
+    if prefix:
+        yield prefix
     async for piece in client.complete_stream(
         settings.model_route,
-        prompts.answer_messages(question, sql, preview, result.rowcount, result.truncated),
+        prompts.answer_messages(
+            question, sql, preview, result.rowcount, result.truncated, count_prefixed=bool(prefix)
+        ),
     ):
         yield piece
 

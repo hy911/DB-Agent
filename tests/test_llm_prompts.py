@@ -99,6 +99,29 @@ def test_answer_system_uses_given_count_and_matches_language():
     assert "same language" in system  # answer in the question's language
 
 
+def test_answer_system_forbids_excluding_rows_from_count():
+    # the headline total must equal the row count even for control/vehicle rows
+    # (the cause of "阳性药数据" returning 35/29/0 instead of the real 48)
+    system = answer_messages("q", "s", "(0 rows)")[0]["content"].lower()
+    assert "exclude" in system or "subset" in system
+    assert "control" in system or "vehicle" in system
+
+
+def test_answer_messages_count_line_forbids_exclusion():
+    msgs = answer_messages("list", "SELECT ...", "a\nb", rowcount=48, truncated=False)
+    joined = " ".join(m["content"] for m in msgs).lower()
+    assert "48" in joined
+    assert "exclude" in joined  # control/vehicle rows still count
+
+
+def test_answer_messages_count_prefixed_tells_llm_not_to_restate_total():
+    # when the system already prepended the count, the LLM must not state its own total
+    msgs = answer_messages("list", "SELECT ...", "a\nb", rowcount=48, count_prefixed=True)
+    joined = " ".join(m["content"] for m in msgs).lower()
+    assert "already been shown" in joined
+    assert "do not state any record count" in joined
+
+
 def test_extract_genes_messages_include_question():
     from db_agent.llm.prompts import extract_genes_messages
 

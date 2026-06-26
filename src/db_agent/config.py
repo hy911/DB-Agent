@@ -84,6 +84,10 @@ class Settings(BaseSettings):
     # defaults to ~600s, so a hung gateway makes /query pend for minutes before a
     # 502. Each graph step is one call; the loop may make several.
     llm_timeout_s: int = 60
+    # Greedy decoding by default: identical questions should yield identical SQL and
+    # answers (a non-zero default made the same query return different row counts /
+    # SQL run-to-run). Raise only if you deliberately want sampling variety.
+    llm_temperature: float = 0.0
     model_embed: str = Field(  # question embedding for example retrieval
         default="qwen-embedding",
         validation_alias=AliasChoices("DBAGENT_MODEL_EMBED", "MODEL_EMBED"),

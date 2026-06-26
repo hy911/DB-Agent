@@ -54,3 +54,22 @@ def test_rejects_file_reader_in_scalar_position():
 def test_rejects_current_setting():
     with pytest.raises(GuardError):
         validate_analysis_sql("SELECT current_setting('home_directory') FROM result")
+
+
+def test_rejects_filter_only_analysis():
+    # a WHERE that just drops rows (no aggregation) is not post-processing — it would
+    # make the answer describe fewer rows than the result table (the "CT26的阳性药数据"
+    # 48→11 bug). Filtering belongs in the main SQL.
+    with pytest.raises(GuardError) as ei:
+        validate_analysis_sql("SELECT * FROM result WHERE drug_name NOT IN ('vehicle', 'Vehicle')")
+    assert ei.value.category == "analysis_row_filter_only"
+
+
+def test_allows_aggregation_with_where():
+    # a WHERE alongside aggregation is fine (it computes over a subset)
+    validate_analysis_sql("SELECT COUNT(*) FROM result WHERE tgi_tv > 50")
+    validate_analysis_sql("SELECT drug_name, AVG(tgi_tv) FROM result GROUP BY drug_name")
+
+
+def test_allows_per_row_transform_without_filter():
+    validate_analysis_sql("SELECT model_name, tgi_tv / 100 AS frac FROM result")

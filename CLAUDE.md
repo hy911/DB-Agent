@@ -57,13 +57,18 @@ Architecture (already agreed, build to these):
   django/auth/rbac system tables, `m_`-prefixed mirror tables, and `*_stats`
   deprecated tables.
 
-## Status (2026-06-23)
+## Status (2026-06-25)
 
 **Phase 1 MVP complete and live-verified** end-to-end through the FastAPI
 endpoint. **Phase 2 complete + live-verified** — DuckDB post-processing, 13-test
 stats inference, few-shot example retrieval, and two-stage rerank. The chronic
 gateway 504 was root-caused + fixed (Qwen3 thinking mode), so the full chain is now
 live-verified end-to-end. The chain (all layers built):
+
+(Note: "Phase 1/2 MVP" above = the original build-out. A SEPARATE **optimization-
+blueprint** track — referenced as "(Phase 1/2)" in the capability bullets below —
+added the critic / value-alignment / JOIN-edge / EA-eval / structural-recall work;
+its Phase 3 (Plan-and-Solve, multi-candidate) is deferred.)
 
 ```
 domain route / clarify → context assembly (yaml + JOIN-edge graph) → SQL gen (qwen-code)
@@ -172,7 +177,9 @@ gateway's per-model config. The gateway also has `num_retries: 2`.
 
 Still deferred (do not build until asked): **LLM gateway client-side retry/backoff**
 (gateway already has `num_retries: 2`), and more stats tests (Fisher exact, Levene,
-mixed/repeated-measures) — pure `sandbox/stats/registry.py` additions once asked.
+mixed/repeated-measures) — pure `sandbox/stats/registry.py` additions once asked. Also
+**optimization Phase 3** (Plan-and-Solve decomposed generation + multi-candidate /
+self-consistency voting) — deferred pending more EA golden data to justify the cost.
 
 ### Permission policy (Phase 1, confirmed with the user)
 
@@ -297,8 +304,23 @@ unless 3.11 support is explicitly dropped.
   `model_type='CDX'` (a real cause of differing result counts).
 - **The NL answer's count comes from `result.rowcount`, not the model.** The
   answer LLM only sees a *truncated* row preview, so it must never recount or
-  de-duplicate — `answer_messages` passes the authoritative `rowcount`/`truncated`
-  and the prompt says to state it verbatim (it answers in the question's language).
+  de-duplicate. Prompting alone was NOT enough — for a multi-row list the model
+  reliably under-counts (e.g. "CT26的阳性药数据" → 11 distinct drugs instead of 48
+  rows). So `answer_node` **deterministically prepends** an authoritative, language-
+  aware "共查询到 N 条记录。 / Found N records." line (`agent_llm._record_count_prefix`,
+  raw-result branch only, skipped for single-row aggregates) and tells the LLM via
+  `answer_messages(count_prefixed=True)` to describe only, not restate a total.
+- **LLM calls are greedy (`temperature=0`, `Settings.llm_temperature`).** A non-zero
+  default made the *same* question return different SQL and different answer counts
+  run-to-run (the "为什么每次结果都不一样" bug); greedy decoding makes generation
+  near-deterministic and also lifted the EA benchmark to 100%.
+- **The DuckDB `analyze` step may aggregate/reshape, never just filter rows.**
+  `sandbox/validator.py` rejects a filter-only analysis (a WHERE/HAVING with no
+  aggregate and no GROUP BY, e.g. `SELECT * FROM result WHERE drug_name NOT IN
+  ('vehicle',…)`); such a reshape silently dropped rows so the answer described
+  fewer than the result table (the 48→11 root cause). Row filtering belongs in the
+  main SQL; on rejection `analyze_node` fail-soft returns `{}` and answers from the
+  raw result.
 - **The multi-domain fan-out runs per-domain subgraphs concurrently**
   (`asyncio.gather` in `build.run_agent`). Offline fakes must be **content-aware**
   (decide replies by model + message text, e.g. the table name in the SQL context),
@@ -354,7 +376,8 @@ unless 3.11 support is explicitly dropped.
   **`ReadReplica.fetch(sql, params)`** is for trusted hand-written parameterized
   queries (e.g. gene resolution) — value always bound, never interpolated.
 - **Tests:** `uv run pytest` is offline (DB/LLM faked, `integration` deselected);
-  `uv run pytest -m integration` runs live-DB tests (needs `.env` DSN). The LLM client
+  `uv run pytest -m integration` runs live-DB tests (needs `.env` DSN); `uv run pytest
+  -m eval -s` runs the Execution-Accuracy benchmark (needs gateway + replica). The LLM client
   is **async** — offline fakes must make `complete` / `acompletion` coroutines, else
   the chain `await`s a plain value and breaks.
 - `model_ccle_expression_data` is ~36M rows — the big-table EXPLAIN gate is real
