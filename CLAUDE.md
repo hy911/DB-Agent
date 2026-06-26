@@ -280,8 +280,9 @@ uv run ruff check src tests && uv run ruff format src tests
 # Live end-to-end replay of a question (hits the gateway):
 #   await run_agent(q, llm=LiteLLMClient(s), replica=ReadReplica(s),
 #       layer=load_semantic_layer(s.semantic_layer_path), settings=s)
-# AgentResult fields: status / sql / result / answer / clarification / error
-# (there is no `.domain`). Guard with asyncio.wait_for.
+# AgentResult fields: status / sql / result / answer / clarification / error /
+# analysis_sql / stat_request / run_id / results (there is no `.domain`).
+# Guard with asyncio.wait_for.
 ```
 
 Note: modules still keep `from __future__ import annotations` and ruff stays on
@@ -321,6 +322,13 @@ unless 3.11 support is explicitly dropped.
   fewer than the result table (the 48→11 root cause). Row filtering belongs in the
   main SQL; on rejection `analyze_node` fail-soft returns `{}` and answers from the
   raw result.
+- **Debugging a wrong/inconsistent answer count: check `AgentResult.analysis_sql`
+  first.** If non-None, the answer describes the *reshaped* DuckDB result, while
+  `.result` (the table) holds the raw rows — they can diverge. Three escalating
+  answer-prompt rewrites failed to stop the undercount; the deterministic count
+  prefix + the analyze filter-only guard fixed it. Lesson: for count/row-set
+  correctness, prefer a deterministic guard or system-injected value over trying to
+  prompt the model into compliance.
 - **The multi-domain fan-out runs per-domain subgraphs concurrently**
   (`asyncio.gather` in `build.run_agent`). Offline fakes must be **content-aware**
   (decide replies by model + message text, e.g. the table name in the SQL context),

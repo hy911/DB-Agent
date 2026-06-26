@@ -1,1363 +1,1843 @@
 <!doctype html>
 <html lang="zh-CN">
 <head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>DB-Agent · 小鼠肿瘤模型问答</title>
-<link rel="preconnect" href="https://fonts.googleapis.com" />
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-<link
-  href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap"
-  rel="stylesheet"
-/>
-<style>
-  :root {
-    /* clinical-paper + petrol-instrument palette — chosen for an oncology
-       data instrument, not a generic dashboard */
-    --paper: #f3f5f2;
-    --surface: #fcfcfb;
-    --surface-sunk: #f6f7f4;
-    --ink: #16201e;
-    --ink-soft: #59635f;
-    --ink-faint: #8a938e;
-    --line: #e3e6e1;
-    --line-strong: #d3d8d2;
+    <meta charset="utf-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1"/>
+    <title>DB-Agent · 小鼠肿瘤模型问答</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com"/>
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+    <link
+            href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap"
+            rel="stylesheet"
+    />
+    <style>
+        :root {
+            /* clinical-paper + petrol-instrument palette — chosen for an oncology
+               data instrument, not a generic dashboard */
+            --paper: #f3f5f2;
+            --surface: #fcfcfb;
+            --surface-sunk: #f6f7f4;
+            --ink: #16201e;
+            --ink-soft: #59635f;
+            --ink-faint: #8a938e;
+            --line: #e3e6e1;
+            --line-strong: #d3d8d2;
 
-    --accent: #0c6e63;
-    --accent-deep: #084a43;
-    --accent-tint: #e5f0ec;
+            --accent: #0c6e63;
+            --accent-deep: #084a43;
+            --accent-tint: #e5f0ec;
 
-    --clarify: #2f5c8f;
-    --clarify-tint: #e8eef6;
-    --warn: #946410;
-    --warn-tint: #f6efdf;
-    --error: #a23a33;
-    --error-tint: #f6e9e7;
+            --clarify: #2f5c8f;
+            --clarify-tint: #e8eef6;
+            --warn: #946410;
+            --warn-tint: #f6efdf;
+            --error: #a23a33;
+            --error-tint: #f6e9e7;
 
-    --r-card: 14px;
-    --r-soft: 9px;
-    --shadow: 0 1px 2px rgba(22, 32, 30, 0.04), 0 8px 24px rgba(22, 32, 30, 0.05);
+            --r-card: 14px;
+            --r-soft: 9px;
+            --shadow: 0 1px 2px rgba(22, 32, 30, 0.04), 0 8px 24px rgba(22, 32, 30, 0.05);
 
-    --font-display: "Space Grotesk", "Segoe UI", system-ui, sans-serif;
-    --font-body: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
-    --font-mono: "IBM Plex Mono", ui-monospace, "Cascadia Code", Consolas, monospace;
-  }
+            --font-display: "Space Grotesk", "Segoe UI", system-ui, sans-serif;
+            --font-body: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+            --font-mono: "IBM Plex Mono", ui-monospace, "Cascadia Code", Consolas, monospace;
+        }
 
-  * { box-sizing: border-box; }
+        * {
+            box-sizing: border-box;
+        }
 
-  html, body { height: 100%; }
+        html, body {
+            height: 100%;
+        }
 
-  body {
-    margin: 0;
-    font-family: var(--font-body);
-    font-size: 15px;
-    line-height: 1.6;
-    color: var(--ink);
-    background: var(--paper);
-    -webkit-font-smoothing: antialiased;
-  }
+        body {
+            margin: 0;
+            font-family: var(--font-body);
+            font-size: 15px;
+            line-height: 1.6;
+            color: var(--ink);
+            background: var(--paper);
+            -webkit-font-smoothing: antialiased;
+        }
 
-  .app {
-    display: flex;
-    flex-direction: column;
-    height: 100dvh;
-    max-width: 880px;
-    margin: 0 auto;
-    background: var(--paper);
-  }
+        .app {
+            display: flex;
+            flex-direction: column;
+            height: 100dvh;
+            max-width: 880px;
+            margin: 0 auto;
+            background: var(--paper);
+        }
 
-  /* ── top bar ─────────────────────────────────────────── */
-  .topbar {
-    flex: none;
-    display: flex;
-    align-items: baseline;
-    gap: 12px;
-    padding: 18px 28px 14px;
-    border-bottom: 1px solid var(--line);
-  }
-  .wordmark {
-    font-family: var(--font-display);
-    font-weight: 700;
-    font-size: 19px;
-    letter-spacing: -0.01em;
-    color: var(--ink);
-  }
-  .wordmark .dot { color: var(--accent); }
-  .subtitle {
-    font-size: 12.5px;
-    color: var(--ink-faint);
-    letter-spacing: 0.01em;
-  }
-  .health {
-    margin-left: auto;
-    display: inline-flex;
-    align-items: center;
-    gap: 7px;
-    font-size: 11.5px;
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
-    color: var(--ink-soft);
-    align-self: center;
-  }
-  .health .led {
-    width: 8px; height: 8px;
-    border-radius: 50%;
-    background: var(--ink-faint);
-    box-shadow: 0 0 0 0 rgba(12, 110, 99, 0.4);
-  }
-  .health[data-state="up"] .led {
-    background: var(--accent);
-    animation: pulse 2.6s ease-out infinite;
-  }
-  .health[data-state="down"] .led { background: var(--error); }
-  @keyframes pulse {
-    0% { box-shadow: 0 0 0 0 rgba(12, 110, 99, 0.35); }
-    70% { box-shadow: 0 0 0 7px rgba(12, 110, 99, 0); }
-    100% { box-shadow: 0 0 0 0 rgba(12, 110, 99, 0); }
-  }
+        /* ── top bar ─────────────────────────────────────────── */
+        .topbar {
+            flex: none;
+            display: flex;
+            align-items: baseline;
+            gap: 12px;
+            padding: 18px 28px 14px;
+            border-bottom: 1px solid var(--line);
+        }
 
-  /* ── message stream ──────────────────────────────────── */
-  .stream {
-    flex: 1 1 auto;
-    min-height: 0; /* allow the flex child to shrink so overflow-y can scroll */
-    overflow-y: auto;
-    padding: 24px 28px 8px;
-    display: flex;
-    flex-direction: column;
-    gap: 22px;
-    scroll-behavior: smooth;
-  }
+        .wordmark {
+            font-family: var(--font-display);
+            font-weight: 700;
+            font-size: 19px;
+            letter-spacing: -0.01em;
+            color: var(--ink);
+        }
 
-  /* empty state */
-  .empty {
-    margin: auto;
-    max-width: 540px;
-    text-align: center;
-    padding: 24px 0 48px;
-  }
-  .empty h1 {
-    font-family: var(--font-display);
-    font-weight: 600;
-    font-size: 26px;
-    line-height: 1.25;
-    letter-spacing: -0.015em;
-    margin: 0 0 10px;
-  }
-  .empty p {
-    color: var(--ink-soft);
-    margin: 0 0 26px;
-    font-size: 14.5px;
-  }
-  .eyebrow {
-    font-size: 11px;
-    letter-spacing: 0.16em;
-    text-transform: uppercase;
-    color: var(--accent);
-    font-weight: 600;
-    margin-bottom: 14px;
-  }
-  .chips {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 9px;
-    justify-content: center;
-  }
-  .chip {
-    font-family: var(--font-body);
-    font-size: 13.5px;
-    color: var(--ink);
-    background: var(--surface);
-    border: 1px solid var(--line-strong);
-    border-radius: 999px;
-    padding: 8px 15px;
-    cursor: pointer;
-    transition: border-color 0.15s, color 0.15s, transform 0.15s;
-  }
-  .chip:hover { border-color: var(--accent); color: var(--accent-deep); }
-  .chip:active { transform: translateY(1px); }
+        .wordmark .dot {
+            color: var(--accent);
+        }
 
-  /* user turn */
-  .turn-user {
-    flex: none; /* never shrink inside the scrolling column — keep natural height */
-    align-self: flex-end;
-    max-width: 76%;
-    background: var(--accent);
-    color: #f4faf8;
-    padding: 11px 16px;
-    border-radius: 16px 16px 4px 16px;
-    font-size: 14.5px;
-    line-height: 1.5;
-    white-space: pre-wrap;
-    word-break: break-word;
-    box-shadow: var(--shadow);
-  }
+        .subtitle {
+            font-size: 12.5px;
+            color: var(--ink-faint);
+            letter-spacing: 0.01em;
+        }
 
-  /* agent turn — the signature card */
-  .turn-agent {
-    flex: none; /* content defines height; must not be compressed by the column */
-    align-self: stretch;
-    position: relative;
-    background: var(--surface);
-    border: 1px solid var(--line);
-    border-radius: var(--r-card);
-    padding: 18px 20px 18px 22px;
-    box-shadow: var(--shadow);
-    overflow: hidden;
-  }
-  /* electrophoresis / chromatography "lane" — the page's one bold gesture */
-  .turn-agent::before {
-    content: "";
-    position: absolute;
-    left: 0; top: 0; bottom: 0;
-    width: 5px;
-    background:
-      repeating-linear-gradient(
-        180deg,
-        var(--accent-deep) 0 7px,
-        var(--accent) 7px 11px,
-        rgba(12, 110, 99, 0.35) 11px 19px,
-        var(--accent) 19px 23px
-      );
-  }
-  .turn-agent[data-status="clarify"]::before {
-    background: repeating-linear-gradient(180deg, var(--clarify) 0 9px, rgba(47,92,143,0.4) 9px 17px);
-  }
-  .turn-agent[data-status="error"]::before {
-    background: repeating-linear-gradient(180deg, var(--error) 0 9px, rgba(162,58,51,0.4) 9px 17px);
-  }
+        .health {
+            margin-left: auto;
+            display: inline-flex;
+            align-items: center;
+            gap: 7px;
+            font-size: 11.5px;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+            color: var(--ink-soft);
+            align-self: center;
+        }
 
-  .agent-head {
-    display: flex;
-    align-items: center;
-    gap: 9px;
-    margin-bottom: 9px;
-  }
-  .agent-name {
-    font-family: var(--font-display);
-    font-weight: 600;
-    font-size: 12.5px;
-    letter-spacing: 0.02em;
-    color: var(--ink-soft);
-  }
-  .badge {
-    font-size: 10.5px;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    font-weight: 600;
-    padding: 2px 8px;
-    border-radius: 999px;
-  }
-  .badge.answered { color: var(--accent-deep); background: var(--accent-tint); }
-  .badge.clarify { color: var(--clarify); background: var(--clarify-tint); }
-  .badge.error { color: var(--error); background: var(--error-tint); }
+        .health .led {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--ink-faint);
+            box-shadow: 0 0 0 0 rgba(12, 110, 99, 0.4);
+        }
 
-  .answer {
-    font-size: 15px;
-    line-height: 1.62;
-    white-space: pre-wrap;
-    word-break: break-word;
-  }
-  .answer.clarify-text {
-    color: var(--clarify);
-  }
-  .answer.error-text {
-    color: var(--error);
-  }
+        .health[data-state="up"] .led {
+            background: var(--accent);
+            animation: pulse 2.6s ease-out infinite;
+        }
 
-  /* per-domain result sections (multi-domain fan-out); single domain renders one
-     unlabelled section, so the divider only appears between consecutive sections */
-  .result-domain + .result-domain {
-    margin-top: 16px;
-    padding-top: 14px;
-    border-top: 1px dashed var(--line-strong);
-  }
-  .domain-label {
-    font-size: 12px;
-    font-weight: 600;
-    letter-spacing: .04em;
-    text-transform: uppercase;
-    color: var(--accent);
-    margin: 4px 0 8px;
-  }
+        .health[data-state="down"] .led {
+            background: var(--error);
+        }
 
-  /* rendered markdown answer — LLM replies arrive as GFM (tables, bold, lists) */
-  .answer.answer-md { white-space: normal; }
-  .answer-md > :first-child { margin-top: 0; }
-  .answer-md > :last-child { margin-bottom: 0; }
-  .answer-md p { margin: 0 0 10px; }
-  .answer-md strong { font-weight: 600; }
-  .answer-md em { font-style: italic; }
-  .answer-md ul, .answer-md ol { margin: 0 0 10px; padding-left: 22px; }
-  .answer-md li { margin: 2px 0; }
-  .answer-md h1, .answer-md h2, .answer-md h3, .answer-md h4 {
-    font-family: var(--font-display);
-    font-weight: 600;
-    line-height: 1.3;
-    margin: 14px 0 8px;
-  }
-  .answer-md h1 { font-size: 18px; }
-  .answer-md h2 { font-size: 16px; }
-  .answer-md h3, .answer-md h4 { font-size: 14.5px; }
-  .answer-md code {
-    font-family: var(--font-mono);
-    font-size: 12.5px;
-    background: var(--surface-sunk);
-    border: 1px solid var(--line);
-    border-radius: 4px;
-    padding: 0 4px;
-  }
-  .answer-md a { color: var(--accent-deep); text-decoration: underline; }
-  .answer-md .md-table-scroll { overflow-x: auto; margin: 0 0 10px; }
-  .answer-md table {
-    border-collapse: collapse;
-    font-size: 13px;
-    min-width: 100%;
-  }
-  .answer-md th, .answer-md td {
-    text-align: left;
-    padding: 6px 11px;
-    border: 1px solid var(--line);
-    white-space: nowrap;
-  }
-  .answer-md thead th {
-    background: var(--surface-sunk);
-    font-family: var(--font-display);
-    font-weight: 600;
-    font-size: 12px;
-    color: var(--ink-soft);
-  }
-  .answer-md tbody tr:nth-child(even) td { background: rgba(22,32,30,0.018); }
-  .clarify-hint, .error-hint {
-    margin-top: 8px;
-    font-size: 12.5px;
-    color: var(--ink-faint);
-  }
+        @keyframes pulse {
+            0% {
+                box-shadow: 0 0 0 0 rgba(12, 110, 99, 0.35);
+            }
+            70% {
+                box-shadow: 0 0 0 7px rgba(12, 110, 99, 0);
+            }
+            100% {
+                box-shadow: 0 0 0 0 rgba(12, 110, 99, 0);
+            }
+        }
 
-  /* disclosure panels: instrument readouts */
-  .readout { margin-top: 14px; border-top: 1px dashed var(--line-strong); padding-top: 12px; }
-  details.readout summary {
-    list-style: none;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    font-size: 12px;
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
-    font-weight: 600;
-    color: var(--ink-soft);
-    user-select: none;
-  }
-  details.readout summary::-webkit-details-marker { display: none; }
-  .caret {
-    width: 0; height: 0;
-    border-left: 5px solid var(--ink-faint);
-    border-top: 4px solid transparent;
-    border-bottom: 4px solid transparent;
-    transition: transform 0.18s ease;
-  }
-  details[open] > summary .caret { transform: rotate(90deg); }
-  .summary-meta { margin-left: auto; color: var(--ink-faint); font-weight: 500; letter-spacing: 0.02em; text-transform: none; }
+        /* ── message stream ──────────────────────────────────── */
+        .stream {
+            flex: 1 1 auto;
+            min-height: 0; /* allow the flex child to shrink so overflow-y can scroll */
+            overflow-y: auto;
+            padding: 24px 28px 8px;
+            display: flex;
+            flex-direction: column;
+            gap: 22px;
+            scroll-behavior: smooth;
+        }
 
-  .panel {
-    margin-top: 10px;
-    background: var(--surface-sunk);
-    border: 1px solid var(--line);
-    border-radius: var(--r-soft);
-  }
+        /* empty state */
+        .empty {
+            margin: auto;
+            max-width: 540px;
+            text-align: center;
+            padding: 24px 0 48px;
+        }
 
-  /* SQL block */
-  .sql-wrap { position: relative; }
-  pre.sql {
-    margin: 0;
-    padding: 14px 14px 14px 16px;
-    font-family: var(--font-mono);
-    font-size: 12.5px;
-    line-height: 1.7;
-    color: var(--ink);
-    overflow-x: auto;
-    white-space: pre;
-    background:
-      linear-gradient(var(--surface-sunk), var(--surface-sunk)) padding-box,
-      repeating-linear-gradient(180deg, transparent 0 27px, rgba(22,32,30,0.025) 27px 28px);
-  }
-  .copy-btn {
-    position: absolute;
-    top: 8px; right: 8px;
-    font-family: var(--font-body);
-    font-size: 11px;
-    letter-spacing: 0.04em;
-    color: var(--ink-soft);
-    background: var(--surface);
-    border: 1px solid var(--line-strong);
-    border-radius: 6px;
-    padding: 3px 9px;
-    cursor: pointer;
-    transition: color 0.15s, border-color 0.15s;
-  }
-  .copy-btn:hover { color: var(--accent-deep); border-color: var(--accent); }
+        .empty h1 {
+            font-family: var(--font-display);
+            font-weight: 600;
+            font-size: 26px;
+            line-height: 1.25;
+            letter-spacing: -0.015em;
+            margin: 0 0 10px;
+        }
 
-  /* result table */
-  .table-scroll { overflow-x: auto; max-height: 360px; overflow-y: auto; }
-  table.result {
-    border-collapse: collapse;
-    width: 100%;
-    font-size: 12.5px;
-  }
-  table.result th, table.result td {
-    text-align: left;
-    padding: 7px 12px;
-    border-bottom: 1px solid var(--line);
-    white-space: nowrap;
-  }
-  table.result thead th {
-    position: sticky;
-    top: 0;
-    background: var(--surface);
-    font-family: var(--font-display);
-    font-weight: 600;
-    font-size: 11.5px;
-    letter-spacing: 0.02em;
-    color: var(--ink-soft);
-    border-bottom: 1px solid var(--line-strong);
-  }
-  table.result td {
-    font-family: var(--font-mono);
-    color: var(--ink);
-  }
-  table.result tbody tr:nth-child(even) td { background: rgba(22,32,30,0.018); }
-  td.nullcell { color: var(--ink-faint); font-style: italic; }
+        .empty p {
+            color: var(--ink-soft);
+            margin: 0 0 26px;
+            font-size: 14.5px;
+        }
 
-  .truncated-flag {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    margin-top: 8px;
-    font-size: 11.5px;
-    color: var(--warn);
-    background: var(--warn-tint);
-    border-radius: 6px;
-    padding: 4px 9px;
-  }
-  .rowcap-note {
-    padding: 8px 12px;
-    font-size: 11.5px;
-    color: var(--ink-faint);
-    border-top: 1px solid var(--line);
-  }
+        .eyebrow {
+            font-size: 11px;
+            letter-spacing: 0.16em;
+            text-transform: uppercase;
+            color: var(--accent);
+            font-weight: 600;
+            margin-bottom: 14px;
+        }
 
-  /* chart panel */
-  .chart-controls { display: flex; align-items: center; gap: 9px; padding: 10px 12px 2px; flex-wrap: wrap; }
-  .seg { display: inline-flex; border: 1px solid var(--line-strong); border-radius: 7px; overflow: hidden; }
-  .seg button {
-    font-family: var(--font-body); font-size: 11.5px; color: var(--ink-soft);
-    background: var(--surface); border: none; padding: 4px 12px; cursor: pointer;
-    transition: background 0.15s, color 0.15s;
-  }
-  .seg button + button { border-left: 1px solid var(--line-strong); }
-  .seg button[aria-pressed="true"] { background: var(--accent); color: #f4faf8; }
-  .ctl-label { font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-faint); }
-  .chart-controls select {
-    font-family: var(--font-body); font-size: 11.5px; color: var(--ink);
-    background: var(--surface); border: 1px solid var(--line-strong);
-    border-radius: 7px; padding: 4px 8px; cursor: pointer;
-  }
-  .chart-host { padding: 8px 10px 10px; }
-  .chart-host svg { width: 100%; height: auto; display: block; }
-  .chart-host .grid { stroke: var(--line); stroke-width: 1; }
-  .chart-host .axis { stroke: var(--line-strong); stroke-width: 1; }
-  .chart-host .tick, .chart-host .xlab { fill: var(--ink-faint); font-family: var(--font-mono); font-size: 9px; }
-  .chart-host .xlab { fill: var(--ink-soft); }
-  .chart-host .bar { fill: var(--accent); transition: fill 0.12s; }
-  .chart-host .bar:hover { fill: var(--accent-deep); }
-  .chart-host .line { fill: none; stroke: var(--accent); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
-  .chart-host .area { fill: var(--accent); opacity: 0.08; }
-  .chart-host .dot { fill: var(--surface); stroke: var(--accent); stroke-width: 1.5; }
-  .chart-note { padding: 0 12px 10px; font-size: 11px; color: var(--ink-faint); }
-  .chart-legend { display: flex; flex-wrap: wrap; gap: 5px 16px; padding: 4px 12px 6px; }
-  .chart-legend span { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; color: var(--ink-soft); font-family: var(--font-mono); }
-  .chart-legend i { width: 12px; height: 3px; border-radius: 2px; display: inline-block; }
+        .chips {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 9px;
+            justify-content: center;
+        }
 
-  /* thinking indicator */
-  .thinking {
-    display: inline-flex;
-    align-items: center;
-    gap: 9px;
-    color: var(--ink-soft);
-    font-size: 13.5px;
-  }
-  .thinking .lanes { display: inline-flex; gap: 3px; }
-  .thinking .lanes i {
-    width: 3px; height: 13px;
-    background: var(--accent);
-    border-radius: 2px;
-    opacity: 0.35;
-    animation: run 1s ease-in-out infinite;
-  }
-  .thinking .lanes i:nth-child(2) { animation-delay: 0.12s; }
-  .thinking .lanes i:nth-child(3) { animation-delay: 0.24s; }
-  .thinking .lanes i:nth-child(4) { animation-delay: 0.36s; }
-  @keyframes run {
-    0%, 100% { transform: scaleY(0.5); opacity: 0.3; }
-    50% { transform: scaleY(1); opacity: 1; }
-  }
+        .chip {
+            font-family: var(--font-body);
+            font-size: 13.5px;
+            color: var(--ink);
+            background: var(--surface);
+            border: 1px solid var(--line-strong);
+            border-radius: 999px;
+            padding: 8px 15px;
+            cursor: pointer;
+            transition: border-color 0.15s, color 0.15s, transform 0.15s;
+        }
 
-  .fade-in { animation: fade 0.32s ease both; }
-  @keyframes fade { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+        .chip:hover {
+            border-color: var(--accent);
+            color: var(--accent-deep);
+        }
 
-  /* ── composer ────────────────────────────────────────── */
-  .composer {
-    flex: none;
-    border-top: 1px solid var(--line);
-    padding: 14px 28px 20px;
-    background: var(--paper);
-  }
-  .composer-inner {
-    display: flex;
-    align-items: flex-end;
-    gap: 10px;
-    background: var(--surface);
-    border: 1px solid var(--line-strong);
-    border-radius: 14px;
-    padding: 8px 8px 8px 16px;
-    transition: border-color 0.15s, box-shadow 0.15s;
-  }
-  .composer-inner:focus-within {
-    border-color: var(--accent);
-    box-shadow: 0 0 0 3px var(--accent-tint);
-  }
-  textarea#q {
-    flex: 1 1 auto;
-    border: none;
-    outline: none;
-    resize: none;
-    background: transparent;
-    font-family: var(--font-body);
-    font-size: 15px;
-    line-height: 1.5;
-    color: var(--ink);
-    max-height: 168px;
-    padding: 6px 0;
-  }
-  textarea#q::placeholder { color: var(--ink-faint); }
-  .send {
-    flex: none;
-    font-family: var(--font-display);
-    font-weight: 600;
-    font-size: 14px;
-    color: #f4faf8;
-    background: var(--accent);
-    border: none;
-    border-radius: 10px;
-    padding: 9px 18px;
-    cursor: pointer;
-    transition: background 0.15s, opacity 0.15s;
-  }
-  .send:hover:not(:disabled) { background: var(--accent-deep); }
-  .send:disabled { opacity: 0.45; cursor: not-allowed; }
-  .composer-hint {
-    margin: 8px 4px 0;
-    font-size: 11px;
-    color: var(--ink-faint);
-    letter-spacing: 0.01em;
-  }
-  kbd {
-    font-family: var(--font-mono);
-    font-size: 10.5px;
-    background: var(--surface-sunk);
-    border: 1px solid var(--line-strong);
-    border-bottom-width: 2px;
-    border-radius: 4px;
-    padding: 0 5px;
-    color: var(--ink-soft);
-  }
+        .chip:active {
+            transform: translateY(1px);
+        }
 
-  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
+        /* user turn */
+        .turn-user {
+            flex: none; /* never shrink inside the scrolling column — keep natural height */
+            align-self: flex-end;
+            max-width: 76%;
+            background: var(--accent);
+            color: #f4faf8;
+            padding: 11px 16px;
+            border-radius: 16px 16px 4px 16px;
+            font-size: 14.5px;
+            line-height: 1.5;
+            white-space: pre-wrap;
+            word-break: break-word;
+            box-shadow: var(--shadow);
+        }
 
-  @media (max-width: 640px) {
-    .topbar { padding: 14px 16px 12px; flex-wrap: wrap; }
-    .stream { padding: 18px 16px 6px; }
-    .composer { padding: 12px 16px 16px; }
-    .turn-user { max-width: 88%; }
-    .empty h1 { font-size: 22px; }
-  }
+        /* agent turn — the signature card */
+        .turn-agent {
+            flex: none; /* content defines height; must not be compressed by the column */
+            align-self: stretch;
+            position: relative;
+            background: var(--surface);
+            border: 1px solid var(--line);
+            border-radius: var(--r-card);
+            padding: 18px 20px 18px 22px;
+            box-shadow: var(--shadow);
+            overflow: hidden;
+        }
 
-  @media (prefers-reduced-motion: reduce) {
-    *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
-  }
-</style>
+        /* electrophoresis / chromatography "lane" — the page's one bold gesture */
+        .turn-agent::before {
+            content: "";
+            position: absolute;
+            left: 0;
+            top: 0;
+            bottom: 0;
+            width: 5px;
+            background: repeating-linear-gradient(
+                    180deg,
+                    var(--accent-deep) 0 7px,
+                    var(--accent) 7px 11px,
+                    rgba(12, 110, 99, 0.35) 11px 19px,
+                    var(--accent) 19px 23px
+            );
+        }
+
+        .turn-agent[data-status="clarify"]::before {
+            background: repeating-linear-gradient(180deg, var(--clarify) 0 9px, rgba(47, 92, 143, 0.4) 9px 17px);
+        }
+
+        .turn-agent[data-status="error"]::before {
+            background: repeating-linear-gradient(180deg, var(--error) 0 9px, rgba(162, 58, 51, 0.4) 9px 17px);
+        }
+
+        .agent-head {
+            display: flex;
+            align-items: center;
+            gap: 9px;
+            margin-bottom: 9px;
+        }
+
+        .agent-name {
+            font-family: var(--font-display);
+            font-weight: 600;
+            font-size: 12.5px;
+            letter-spacing: 0.02em;
+            color: var(--ink-soft);
+        }
+
+        .badge {
+            font-size: 10.5px;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            font-weight: 600;
+            padding: 2px 8px;
+            border-radius: 999px;
+        }
+
+        .badge.answered {
+            color: var(--accent-deep);
+            background: var(--accent-tint);
+        }
+
+        .badge.clarify {
+            color: var(--clarify);
+            background: var(--clarify-tint);
+        }
+
+        .badge.error {
+            color: var(--error);
+            background: var(--error-tint);
+        }
+
+        .answer {
+            font-size: 15px;
+            line-height: 1.62;
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
+
+        .answer.clarify-text {
+            color: var(--clarify);
+        }
+
+        .answer.error-text {
+            color: var(--error);
+        }
+
+        /* per-domain result sections (multi-domain fan-out); single domain renders one
+           unlabelled section, so the divider only appears between consecutive sections */
+        .result-domain + .result-domain {
+            margin-top: 16px;
+            padding-top: 14px;
+            border-top: 1px dashed var(--line-strong);
+        }
+
+        .domain-label {
+            font-size: 12px;
+            font-weight: 600;
+            letter-spacing: .04em;
+            text-transform: uppercase;
+            color: var(--accent);
+            margin: 4px 0 8px;
+        }
+
+        /* rendered markdown answer — LLM replies arrive as GFM (tables, bold, lists) */
+        .answer.answer-md {
+            white-space: normal;
+        }
+
+        .answer-md > :first-child {
+            margin-top: 0;
+        }
+
+        .answer-md > :last-child {
+            margin-bottom: 0;
+        }
+
+        .answer-md p {
+            margin: 0 0 10px;
+        }
+
+        .answer-md strong {
+            font-weight: 600;
+        }
+
+        .answer-md em {
+            font-style: italic;
+        }
+
+        .answer-md ul, .answer-md ol {
+            margin: 0 0 10px;
+            padding-left: 22px;
+        }
+
+        .answer-md li {
+            margin: 2px 0;
+        }
+
+        .answer-md h1, .answer-md h2, .answer-md h3, .answer-md h4 {
+            font-family: var(--font-display);
+            font-weight: 600;
+            line-height: 1.3;
+            margin: 14px 0 8px;
+        }
+
+        .answer-md h1 {
+            font-size: 18px;
+        }
+
+        .answer-md h2 {
+            font-size: 16px;
+        }
+
+        .answer-md h3, .answer-md h4 {
+            font-size: 14.5px;
+        }
+
+        .answer-md code {
+            font-family: var(--font-mono);
+            font-size: 12.5px;
+            background: var(--surface-sunk);
+            border: 1px solid var(--line);
+            border-radius: 4px;
+            padding: 0 4px;
+        }
+
+        .answer-md a {
+            color: var(--accent-deep);
+            text-decoration: underline;
+        }
+
+        .answer-md .md-table-scroll {
+            overflow-x: auto;
+            margin: 0 0 10px;
+        }
+
+        .answer-md table {
+            border-collapse: collapse;
+            font-size: 13px;
+            min-width: 100%;
+        }
+
+        .answer-md th, .answer-md td {
+            text-align: left;
+            padding: 6px 11px;
+            border: 1px solid var(--line);
+            white-space: nowrap;
+        }
+
+        .answer-md thead th {
+            background: var(--surface-sunk);
+            font-family: var(--font-display);
+            font-weight: 600;
+            font-size: 12px;
+            color: var(--ink-soft);
+        }
+
+        .answer-md tbody tr:nth-child(even) td {
+            background: rgba(22, 32, 30, 0.018);
+        }
+
+        .clarify-hint, .error-hint {
+            margin-top: 8px;
+            font-size: 12.5px;
+            color: var(--ink-faint);
+        }
+
+        /* disclosure panels: instrument readouts */
+        .readout {
+            margin-top: 14px;
+            border-top: 1px dashed var(--line-strong);
+            padding-top: 12px;
+        }
+
+        details.readout summary {
+            list-style: none;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 12px;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+            font-weight: 600;
+            color: var(--ink-soft);
+            user-select: none;
+        }
+
+        details.readout summary::-webkit-details-marker {
+            display: none;
+        }
+
+        .caret {
+            width: 0;
+            height: 0;
+            border-left: 5px solid var(--ink-faint);
+            border-top: 4px solid transparent;
+            border-bottom: 4px solid transparent;
+            transition: transform 0.18s ease;
+        }
+
+        details[open] > summary .caret {
+            transform: rotate(90deg);
+        }
+
+        .summary-meta {
+            margin-left: auto;
+            color: var(--ink-faint);
+            font-weight: 500;
+            letter-spacing: 0.02em;
+            text-transform: none;
+        }
+
+        .panel {
+            margin-top: 10px;
+            background: var(--surface-sunk);
+            border: 1px solid var(--line);
+            border-radius: var(--r-soft);
+        }
+
+        /* SQL block */
+        .sql-wrap {
+            position: relative;
+        }
+
+        pre.sql {
+            margin: 0;
+            padding: 14px 14px 14px 16px;
+            font-family: var(--font-mono);
+            font-size: 12.5px;
+            line-height: 1.7;
+            color: var(--ink);
+            overflow-x: auto;
+            white-space: pre;
+            background: linear-gradient(var(--surface-sunk), var(--surface-sunk)) padding-box,
+            repeating-linear-gradient(180deg, transparent 0 27px, rgba(22, 32, 30, 0.025) 27px 28px);
+        }
+
+        .copy-btn {
+            position: absolute;
+            top: 8px;
+            right: 8px;
+            font-family: var(--font-body);
+            font-size: 11px;
+            letter-spacing: 0.04em;
+            color: var(--ink-soft);
+            background: var(--surface);
+            border: 1px solid var(--line-strong);
+            border-radius: 6px;
+            padding: 3px 9px;
+            cursor: pointer;
+            transition: color 0.15s, border-color 0.15s;
+        }
+
+        .copy-btn:hover {
+            color: var(--accent-deep);
+            border-color: var(--accent);
+        }
+
+        /* result table */
+        .table-scroll {
+            overflow-x: auto;
+            max-height: 360px;
+            overflow-y: auto;
+        }
+
+        table.result {
+            border-collapse: collapse;
+            width: 100%;
+            font-size: 12.5px;
+        }
+
+        table.result th, table.result td {
+            text-align: left;
+            padding: 7px 12px;
+            border-bottom: 1px solid var(--line);
+            white-space: nowrap;
+        }
+
+        table.result thead th {
+            position: sticky;
+            top: 0;
+            background: var(--surface);
+            font-family: var(--font-display);
+            font-weight: 600;
+            font-size: 11.5px;
+            letter-spacing: 0.02em;
+            color: var(--ink-soft);
+            border-bottom: 1px solid var(--line-strong);
+        }
+
+        table.result td {
+            font-family: var(--font-mono);
+            color: var(--ink);
+        }
+
+        table.result tbody tr:nth-child(even) td {
+            background: rgba(22, 32, 30, 0.018);
+        }
+
+        td.nullcell {
+            color: var(--ink-faint);
+            font-style: italic;
+        }
+
+        .truncated-flag {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            margin-top: 8px;
+            font-size: 11.5px;
+            color: var(--warn);
+            background: var(--warn-tint);
+            border-radius: 6px;
+            padding: 4px 9px;
+        }
+
+        .rowcap-note {
+            padding: 8px 12px;
+            font-size: 11.5px;
+            color: var(--ink-faint);
+            border-top: 1px solid var(--line);
+        }
+
+        /* chart panel */
+        .chart-controls {
+            display: flex;
+            align-items: center;
+            gap: 9px;
+            padding: 10px 12px 2px;
+            flex-wrap: wrap;
+        }
+
+        .seg {
+            display: inline-flex;
+            border: 1px solid var(--line-strong);
+            border-radius: 7px;
+            overflow: hidden;
+        }
+
+        .seg button {
+            font-family: var(--font-body);
+            font-size: 11.5px;
+            color: var(--ink-soft);
+            background: var(--surface);
+            border: none;
+            padding: 4px 12px;
+            cursor: pointer;
+            transition: background 0.15s, color 0.15s;
+        }
+
+        .seg button + button {
+            border-left: 1px solid var(--line-strong);
+        }
+
+        .seg button[aria-pressed="true"] {
+            background: var(--accent);
+            color: #f4faf8;
+        }
+
+        .ctl-label {
+            font-size: 11px;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+            color: var(--ink-faint);
+        }
+
+        .chart-controls select {
+            font-family: var(--font-body);
+            font-size: 11.5px;
+            color: var(--ink);
+            background: var(--surface);
+            border: 1px solid var(--line-strong);
+            border-radius: 7px;
+            padding: 4px 8px;
+            cursor: pointer;
+        }
+
+        .chart-host {
+            padding: 8px 10px 10px;
+        }
+
+        .chart-host svg {
+            width: 100%;
+            height: auto;
+            display: block;
+        }
+
+        .chart-host .grid {
+            stroke: var(--line);
+            stroke-width: 1;
+        }
+
+        .chart-host .axis {
+            stroke: var(--line-strong);
+            stroke-width: 1;
+        }
+
+        .chart-host .tick, .chart-host .xlab {
+            fill: var(--ink-faint);
+            font-family: var(--font-mono);
+            font-size: 9px;
+        }
+
+        .chart-host .xlab {
+            fill: var(--ink-soft);
+        }
+
+        .chart-host .bar {
+            fill: var(--accent);
+            transition: fill 0.12s;
+        }
+
+        .chart-host .bar:hover {
+            fill: var(--accent-deep);
+        }
+
+        .chart-host .line {
+            fill: none;
+            stroke: var(--accent);
+            stroke-width: 2;
+            stroke-linejoin: round;
+            stroke-linecap: round;
+        }
+
+        .chart-host .area {
+            fill: var(--accent);
+            opacity: 0.08;
+        }
+
+        .chart-host .dot {
+            fill: var(--surface);
+            stroke: var(--accent);
+            stroke-width: 1.5;
+        }
+
+        .chart-note {
+            padding: 0 12px 10px;
+            font-size: 11px;
+            color: var(--ink-faint);
+        }
+
+        .chart-legend {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 5px 16px;
+            padding: 4px 12px 6px;
+        }
+
+        .chart-legend span {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 11px;
+            color: var(--ink-soft);
+            font-family: var(--font-mono);
+        }
+
+        .chart-legend i {
+            width: 12px;
+            height: 3px;
+            border-radius: 2px;
+            display: inline-block;
+        }
+
+        /* thinking indicator */
+        .thinking {
+            display: inline-flex;
+            align-items: center;
+            gap: 9px;
+            color: var(--ink-soft);
+            font-size: 13.5px;
+        }
+
+        .thinking .lanes {
+            display: inline-flex;
+            gap: 3px;
+        }
+
+        .thinking .lanes i {
+            width: 3px;
+            height: 13px;
+            background: var(--accent);
+            border-radius: 2px;
+            opacity: 0.35;
+            animation: run 1s ease-in-out infinite;
+        }
+
+        .thinking .lanes i:nth-child(2) {
+            animation-delay: 0.12s;
+        }
+
+        .thinking .lanes i:nth-child(3) {
+            animation-delay: 0.24s;
+        }
+
+        .thinking .lanes i:nth-child(4) {
+            animation-delay: 0.36s;
+        }
+
+        @keyframes run {
+            0%, 100% {
+                transform: scaleY(0.5);
+                opacity: 0.3;
+            }
+            50% {
+                transform: scaleY(1);
+                opacity: 1;
+            }
+        }
+
+        .fade-in {
+            animation: fade 0.32s ease both;
+        }
+
+        @keyframes fade {
+            from {
+                opacity: 0;
+                transform: translateY(6px);
+            }
+            to {
+                opacity: 1;
+                transform: none;
+            }
+        }
+
+        /* ── composer ────────────────────────────────────────── */
+        .composer {
+            flex: none;
+            border-top: 1px solid var(--line);
+            padding: 14px 28px 20px;
+            background: var(--paper);
+        }
+
+        .composer-inner {
+            display: flex;
+            align-items: flex-end;
+            gap: 10px;
+            background: var(--surface);
+            border: 1px solid var(--line-strong);
+            border-radius: 14px;
+            padding: 8px 8px 8px 16px;
+            transition: border-color 0.15s, box-shadow 0.15s;
+        }
+
+        .composer-inner:focus-within {
+            border-color: var(--accent);
+            box-shadow: 0 0 0 3px var(--accent-tint);
+        }
+
+        textarea#q {
+            flex: 1 1 auto;
+            border: none;
+            outline: none;
+            resize: none;
+            background: transparent;
+            font-family: var(--font-body);
+            font-size: 15px;
+            line-height: 1.5;
+            color: var(--ink);
+            max-height: 168px;
+            padding: 6px 0;
+        }
+
+        textarea#q::placeholder {
+            color: var(--ink-faint);
+        }
+
+        .send {
+            flex: none;
+            font-family: var(--font-display);
+            font-weight: 600;
+            font-size: 14px;
+            color: #f4faf8;
+            background: var(--accent);
+            border: none;
+            border-radius: 10px;
+            padding: 9px 18px;
+            cursor: pointer;
+            transition: background 0.15s, opacity 0.15s;
+        }
+
+        .send:hover:not(:disabled) {
+            background: var(--accent-deep);
+        }
+
+        .send:disabled {
+            opacity: 0.45;
+            cursor: not-allowed;
+        }
+
+        .composer-hint {
+            margin: 8px 4px 0;
+            font-size: 11px;
+            color: var(--ink-faint);
+            letter-spacing: 0.01em;
+        }
+
+        kbd {
+            font-family: var(--font-mono);
+            font-size: 10.5px;
+            background: var(--surface-sunk);
+            border: 1px solid var(--line-strong);
+            border-bottom-width: 2px;
+            border-radius: 4px;
+            padding: 0 5px;
+            color: var(--ink-soft);
+        }
+
+        :focus-visible {
+            outline: 2px solid var(--accent);
+            outline-offset: 2px;
+            border-radius: 4px;
+        }
+
+        @media (max-width: 640px) {
+            .topbar {
+                padding: 14px 16px 12px;
+                flex-wrap: wrap;
+            }
+
+            .stream {
+                padding: 18px 16px 6px;
+            }
+
+            .composer {
+                padding: 12px 16px 16px;
+            }
+
+            .turn-user {
+                max-width: 88%;
+            }
+
+            .empty h1 {
+                font-size: 22px;
+            }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            *, *::before, *::after {
+                animation: none !important;
+                transition: none !important;
+                scroll-behavior: auto !important;
+            }
+        }
+    </style>
 </head>
 <body>
-  <div class="app">
+<div class="app">
     <header class="topbar">
-      <span class="wordmark">DB<span class="dot">·</span>Agent</span>
-      <span class="subtitle">小鼠肿瘤模型 · 自然语言问答</span>
-      <span class="health" id="health" data-state="checking" title="服务状态">
+        <span class="wordmark">DB<span class="dot">·</span>Agent</span>
+        <span class="subtitle">小鼠肿瘤模型 · 自然语言问答</span>
+        <span class="health" id="health" data-state="checking" title="服务状态">
         <span class="led"></span><span id="health-label">连接中</span>
       </span>
     </header>
 
     <main class="stream" id="stream" aria-live="polite" aria-label="对话">
-      <section class="empty" id="empty">
-        <div class="eyebrow">Ask the database</div>
-        <h1>用一句话问，<br />让数据自己回答。</h1>
-        <p>覆盖药效、建模、表达与突变四个域。生成的 SQL 与结果表都可展开核对。</p>
-        <div class="chips" id="chips"></div>
-      </section>
+        <section class="empty" id="empty">
+            <div class="eyebrow">Ask the database</div>
+            <h1>用一句话问，<br/>让数据自己回答。</h1>
+            <p>覆盖药效、建模、表达与突变四个域。生成的 SQL 与结果表都可展开核对。</p>
+            <div class="chips" id="chips"></div>
+        </section>
     </main>
 
     <footer class="composer">
-      <div class="composer-inner">
-        <textarea id="q" rows="1" placeholder="例如：EGFR 在各模型中的平均表达量是多少？" autofocus></textarea>
-        <button class="send" id="send" type="button">发送</button>
-      </div>
-      <div class="composer-hint"><kbd>Enter</kbd> 发送 · <kbd>Shift</kbd>+<kbd>Enter</kbd> 换行</div>
+        <div class="composer-inner">
+            <textarea id="q" rows="1" placeholder="例如：EGFR 在各模型中的平均表达量是多少？" autofocus></textarea>
+            <button class="send" id="send" type="button">发送</button>
+        </div>
+        <div class="composer-hint"><kbd>Enter</kbd> 发送 · <kbd>Shift</kbd>+<kbd>Enter</kbd> 换行</div>
     </footer>
-  </div>
+</div>
 
 <script>
-(function () {
-  "use strict";
+    (function () {
+        "use strict";
 
-  var EXAMPLES = [
-    "EGFR 在各模型中的平均表达量",
-    "哪些模型对吉非替尼有效",
-    "Trp53 突变的模型有哪些",
-    "肿瘤体积增长最快的前 10 个模型"
-  ];
-  var MAX_TABLE_ROWS = 200; // client-side display cap, distinct from server truncation
+        var EXAMPLES = [
+            "EGFR 在各模型中的平均表达量",
+            "CT26的阳性药数据",
+            "Trp53 突变的模型有哪些",
+            "肿瘤体积增长最快的前 10 个模型"
+        ];
+        var MAX_TABLE_ROWS = 200; // client-side display cap, distinct from server truncation
 
-  var stream = document.getElementById("stream");
-  var empty = document.getElementById("empty");
-  var chips = document.getElementById("chips");
-  var ta = document.getElementById("q");
-  var sendBtn = document.getElementById("send");
-  var busy = false;
+        var stream = document.getElementById("stream");
+        var empty = document.getElementById("empty");
+        var chips = document.getElementById("chips");
+        var ta = document.getElementById("q");
+        var sendBtn = document.getElementById("send");
+        var busy = false;
 
-  // ── helpers ───────────────────────────────────────────
-  function el(tag, cls, text) {
-    var n = document.createElement(tag);
-    if (cls) n.className = cls;
-    if (text != null) n.textContent = text;
-    return n;
-  }
-  function scrollDown() {
-    requestAnimationFrame(function () { stream.scrollTop = stream.scrollHeight; });
-  }
-  function dismissEmpty() {
-    if (empty && empty.parentNode) empty.parentNode.removeChild(empty);
-  }
-
-  // ── minimal GFM renderer ──────────────────────────────
-  // LLM answers arrive as markdown (tables / bold / lists). Zero deps, so we
-  // render a safe subset ourselves. Everything is HTML-escaped first.
-  function escapeHtml(s) {
-    return String(s).replace(/[&<>"']/g, function (c) {
-      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
-    });
-  }
-  function mdInline(s) {
-    // operates on already-escaped text
-    s = s.replace(/`([^`]+)`/g, "<code>$1</code>");
-    s = s.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
-    s = s.replace(/(^|[^*])\*([^*\n]+)\*/g, "$1<em>$2</em>");
-    s = s.replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
-    return s;
-  }
-  function splitRow(line) {
-    var cells = line.replace(/^\s*\|/, "").replace(/\|\s*$/, "").split("|");
-    return cells.map(function (c) { return c.trim(); });
-  }
-  function isTableSep(line) {
-    return /\|/.test(line) && /^[\s|:-]+$/.test(line) && /-/.test(line);
-  }
-  function renderMarkdown(text) {
-    var lines = String(text == null ? "" : text).replace(/\r\n/g, "\n").split("\n");
-    var out = [];
-    var i = 0;
-    while (i < lines.length) {
-      var line = lines[i];
-
-      // GFM pipe table: header row + separator row + body rows
-      if (/\|/.test(line) && i + 1 < lines.length && isTableSep(lines[i + 1])) {
-        var header = splitRow(line);
-        i += 2; // skip header + separator
-        var body = [];
-        while (i < lines.length && /\|/.test(lines[i]) && lines[i].trim() !== "") {
-          body.push(splitRow(lines[i]));
-          i++;
+        // ── helpers ───────────────────────────────────────────
+        function el(tag, cls, text) {
+            var n = document.createElement(tag);
+            if (cls) n.className = cls;
+            if (text != null) n.textContent = text;
+            return n;
         }
-        var th = header.map(function (c) { return "<th>" + mdInline(escapeHtml(c)) + "</th>"; }).join("");
-        var trs = body.map(function (cells) {
-          var tds = header.map(function (_, ci) {
-            return "<td>" + mdInline(escapeHtml(cells[ci] == null ? "" : cells[ci])) + "</td>";
-          }).join("");
-          return "<tr>" + tds + "</tr>";
-        }).join("");
-        out.push('<div class="md-table-scroll"><table><thead><tr>' + th +
-          "</tr></thead><tbody>" + trs + "</tbody></table></div>");
-        continue;
-      }
 
-      // heading
-      var hm = /^(#{1,4})\s+(.*)$/.exec(line);
-      if (hm) {
-        var lvl = hm[1].length;
-        out.push("<h" + lvl + ">" + mdInline(escapeHtml(hm[2])) + "</h" + lvl + ">");
-        i++;
-        continue;
-      }
-
-      // list (consecutive bullet or ordered items)
-      if (/^\s*[-*]\s+/.test(line) || /^\s*\d+[.)]\s+/.test(line)) {
-        var ordered = /^\s*\d+[.)]\s+/.test(line);
-        var items = [];
-        while (i < lines.length && (/^\s*[-*]\s+/.test(lines[i]) || /^\s*\d+[.)]\s+/.test(lines[i]))) {
-          var item = lines[i].replace(/^\s*(?:[-*]|\d+[.)])\s+/, "");
-          items.push("<li>" + mdInline(escapeHtml(item)) + "</li>");
-          i++;
+        function scrollDown() {
+            requestAnimationFrame(function () {
+                stream.scrollTop = stream.scrollHeight;
+            });
         }
-        out.push((ordered ? "<ol>" : "<ul>") + items.join("") + (ordered ? "</ol>" : "</ul>"));
-        continue;
-      }
 
-      // blank line -> separator
-      if (line.trim() === "") { i++; continue; }
-
-      // paragraph: gather consecutive non-empty, non-special lines
-      var para = [];
-      while (
-        i < lines.length &&
-        lines[i].trim() !== "" &&
-        !/^(#{1,4})\s+/.test(lines[i]) &&
-        !/^\s*[-*]\s+/.test(lines[i]) &&
-        !/^\s*\d+[.)]\s+/.test(lines[i]) &&
-        !(/\|/.test(lines[i]) && i + 1 < lines.length && isTableSep(lines[i + 1]))
-      ) {
-        para.push(mdInline(escapeHtml(lines[i])));
-        i++;
-      }
-      out.push("<p>" + para.join("<br>") + "</p>");
-    }
-    return out.join("");
-  }
-
-  // ── render: user turn ─────────────────────────────────
-  function addUser(text) {
-    var n = el("div", "turn-user fade-in", text);
-    stream.appendChild(n);
-    scrollDown();
-  }
-
-  // ── render: thinking placeholder ──────────────────────
-  function addThinking() {
-    var card = el("div", "turn-agent fade-in");
-    card.setAttribute("data-status", "pending");
-    var head = el("div", "agent-head");
-    head.appendChild(el("span", "agent-name", "DB-Agent"));
-    card.appendChild(head);
-    var t = el("div", "thinking");
-    var lanes = el("span", "lanes");
-    for (var i = 0; i < 4; i++) lanes.appendChild(el("i"));
-    t.appendChild(lanes);
-    t.appendChild(el("span", null, "正在检索并生成 SQL…"));
-    card.appendChild(t);
-    stream.appendChild(card);
-    scrollDown();
-    return card;
-  }
-
-  // ── render: agent answer ──────────────────────────────
-  function fillAgent(card, data) {
-    card.innerHTML = "";
-    var status = data.status || "error";
-    card.setAttribute("data-status", status);
-
-    var head = el("div", "agent-head");
-    head.appendChild(el("span", "agent-name", "DB-Agent"));
-    var badgeText = status === "answered" ? "已回答" : status === "clarify" ? "需澄清" : "出错";
-    head.appendChild(el("span", "badge " + status, badgeText));
-    card.appendChild(head);
-
-    if (status === "clarify") {
-      card.appendChild(el("div", "answer clarify-text", data.clarification || "需要更多信息才能继续。"));
-      card.appendChild(el("div", "clarify-hint", "补充上面的细节后再问一次即可。"));
-      return;
-    }
-    if (status === "error") {
-      card.appendChild(el("div", "answer error-text", data.error || "查询未能完成。"));
-      card.appendChild(el("div", "error-hint", "可以换种问法，或缩小范围后重试。"));
-      return;
-    }
-
-    // answered
-    var ans = el("div", "answer answer-md");
-    ans.innerHTML = renderMarkdown(data.answer || "（无文字答案）");
-    card.appendChild(ans);
-
-    // Per-domain sections: results[] holds one section (single domain) or several
-    // (multi-domain fan-out). Fall back to the legacy top-level sql/rows if absent.
-    var sections = (data.results && data.results.length)
-      ? data.results
-      : [{ domain: null, label: null, sql: data.sql, rows: data.rows }];
-    var multi = sections.length > 1;
-    sections.forEach(function (sec) {
-      card.appendChild(buildSection(sec, multi));
-    });
-  }
-
-  function buildSection(sec, labelled) {
-    var box = el("div", "result-domain");
-    if (labelled && (sec.label || sec.domain)) {
-      box.appendChild(el("div", "domain-label", sec.label || sec.domain));
-    }
-    if (sec.clarification) {
-      box.appendChild(el("div", "answer clarify-text", sec.clarification));
-      return box;
-    }
-    if (sec.error) {
-      box.appendChild(el("div", "answer error-text", "该类数据查询出错：" + sec.error));
-      return box;
-    }
-    if (sec.sql) box.appendChild(buildSql(sec.sql));
-    var chart = sec.rows ? buildChart(sec.rows) : null;
-    if (chart) box.appendChild(chart);
-    // when a chart is shown, the table starts collapsed (chart is the headline)
-    if (sec.rows) box.appendChild(buildTable(sec.rows, !chart));
-    return box;
-  }
-
-  function buildSql(sql) {
-    var d = el("details", "readout");
-    var s = el("summary");
-    s.appendChild(el("span", "caret"));
-    s.appendChild(el("span", null, "查看 SQL"));
-    d.appendChild(s);
-    var wrap = el("div", "panel sql-wrap");
-    var pre = el("pre", "sql", sql);
-    var copy = el("button", "copy-btn", "复制");
-    copy.type = "button";
-    copy.addEventListener("click", function () {
-      navigator.clipboard && navigator.clipboard.writeText(sql).then(function () {
-        copy.textContent = "已复制";
-        setTimeout(function () { copy.textContent = "复制"; }, 1400);
-      });
-    });
-    wrap.appendChild(pre);
-    wrap.appendChild(copy);
-    d.appendChild(wrap);
-    return d;
-  }
-
-  function buildTable(rows, openByDefault) {
-    var d = el("details", "readout");
-    var s = el("summary");
-    s.appendChild(el("span", "caret"));
-    s.appendChild(el("span", null, "结果表"));
-    var meta = el("span", "summary-meta", rows.rowcount + " 行" + (rows.truncated ? " · 已截断" : ""));
-    s.appendChild(meta);
-    d.appendChild(s);
-    d.open = openByDefault !== false;
-
-    var panel = el("div", "panel");
-    var scroll = el("div", "table-scroll");
-    var table = el("table", "result");
-    var cols = rows.columns || [];
-
-    var thead = el("thead");
-    var hr = el("tr");
-    cols.forEach(function (c) { hr.appendChild(el("th", null, c)); });
-    thead.appendChild(hr);
-    table.appendChild(thead);
-
-    var tbody = el("tbody");
-    var data = rows.rows || [];
-    var shown = Math.min(data.length, MAX_TABLE_ROWS);
-    for (var i = 0; i < shown; i++) {
-      var tr = el("tr");
-      cols.forEach(function (c) {
-        var v = data[i][c];
-        if (v == null) {
-          tr.appendChild(el("td", "nullcell", "—"));
-        } else {
-          tr.appendChild(el("td", null, String(v)));
+        function dismissEmpty() {
+            if (empty && empty.parentNode) empty.parentNode.removeChild(empty);
         }
-      });
-      tbody.appendChild(tr);
-    }
-    table.appendChild(tbody);
-    scroll.appendChild(table);
-    panel.appendChild(scroll);
 
-    if (data.length > shown) {
-      panel.appendChild(el("div", "rowcap-note", "为浏览流畅，仅显示前 " + shown + " 行（共 " + data.length + " 行返回）。"));
-    }
-    d.appendChild(panel);
+        // ── minimal GFM renderer ──────────────────────────────
+        // LLM answers arrive as markdown (tables / bold / lists). Zero deps, so we
+        // render a safe subset ourselves. Everything is HTML-escaped first.
+        function escapeHtml(s) {
+            return String(s).replace(/[&<>"']/g, function (c) {
+                return {"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"}[c];
+            });
+        }
 
-    if (rows.truncated) {
-      var flag = el("div", "truncated-flag");
-      flag.appendChild(el("span", null, "⚠"));
-      flag.appendChild(el("span", null, "结果在服务端已按上限截断，可能不完整。"));
-      d.appendChild(flag);
-    }
-    return d;
-  }
+        function mdInline(s) {
+            // operates on already-escaped text
+            s = s.replace(/`([^`]+)`/g, "<code>$1</code>");
+            s = s.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
+            s = s.replace(/(^|[^*])\*([^*\n]+)\*/g, "$1<em>$2</em>");
+            s = s.replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
+            return s;
+        }
 
-  // ── chart inference + SVG rendering ───────────────────
-  var SVGNS = "http://www.w3.org/2000/svg";
-  function sv(tag, attrs) {
-    var n = document.createElementNS(SVGNS, tag);
-    if (attrs) for (var k in attrs) n.setAttribute(k, attrs[k]);
-    return n;
-  }
-  function asNum(v) {
-    if (typeof v === "number" && isFinite(v)) return v;
-    if (typeof v === "string" && v.trim() !== "" && !isNaN(Number(v))) return Number(v);
-    return null;
-  }
-  function columnNumeric(data, col) {
-    var seen = false;
-    for (var i = 0; i < data.length; i++) {
-      var v = data[i][col];
-      if (v == null) continue;
-      if (asNum(v) === null) return false;
-      seen = true;
-    }
-    return seen;
-  }
-  function fmt(n) {
-    var a = Math.abs(n);
-    if (a >= 1e9) return (n / 1e9).toFixed(1).replace(/\.0$/, "") + "B";
-    if (a >= 1e6) return (n / 1e6).toFixed(1).replace(/\.0$/, "") + "M";
-    if (a >= 1e3) return (n / 1e3).toFixed(1).replace(/\.0$/, "") + "k";
-    if (a > 0 && a < 1) return n.toFixed(2);
-    return String(Math.round(n * 100) / 100);
-  }
+        function splitRow(line) {
+            var cells = line.replace(/^\s*\|/, "").replace(/\|\s*$/, "").split("|");
+            return cells.map(function (c) {
+                return c.trim();
+            });
+        }
 
-  // column-name hints
-  var ID_RE = /(^|_)(id|no|num|gid|group|arm|cohort)(_|$)|编号|分组|组别|代次/i;
-  var GROUP_RE = /group|arm|cohort|组|代次/i;
-  var SEQ_RE = /day|time|week|month|date|hour|cycle|timepoint|天|周|月|日|时间|周期|代次/i;
+        function isTableSep(line) {
+            return /\|/.test(line) && /^[\s|:-]+$/.test(line) && /-/.test(line);
+        }
 
-  function distinctCount(data, col) {
-    var seen = {}, n = 0;
-    for (var i = 0; i < data.length; i++) {
-      var v = data[i][col];
-      var key = v == null ? " " : String(v);
-      if (!(key in seen)) { seen[key] = 1; n++; }
-    }
-    return n;
-  }
+        function renderMarkdown(text) {
+            var lines = String(text == null ? "" : text).replace(/\r\n/g, "\n").split("\n");
+            var out = [];
+            var i = 0;
+            while (i < lines.length) {
+                var line = lines[i];
 
-  // Decide whether a result set is chartable and how. Heuristic, domain-tuned:
-  //   · need a label/x column + at least one numeric MEASURE column, and >= 2 rows
-  //   · a sequential x (numeric, or a name hinting day/time/cycle) -> line (trends)
-  //   · otherwise a categorical comparison -> bar
-  //   · a second low-cardinality column (group_id, arm, …) -> split a line into series
-  function inferChart(rows) {
-    var cols = rows.columns || [];
-    var data = rows.rows || [];
-    if (data.length < 2 || cols.length < 2) return null;
-    var numCols = cols.filter(function (c) { return columnNumeric(data, c); });
-    if (numCols.length === 0) return null;
-    var catCols = cols.filter(function (c) { return numCols.indexOf(c) < 0; });
-    // x-axis: a sequence column (day/cycle/…) wins even when it's numeric and a
-    // categorical group column is also present — that's the growth-curve shape.
-    var seqCols = cols.filter(function (c) { return SEQ_RE.test(c); });
-    var xCol = seqCols.length ? seqCols[0] : catCols.length ? catCols[0] : cols[0];
+                // GFM pipe table: header row + separator row + body rows
+                if (/\|/.test(line) && i + 1 < lines.length && isTableSep(lines[i + 1])) {
+                    var header = splitRow(line);
+                    i += 2; // skip header + separator
+                    var body = [];
+                    while (i < lines.length && /\|/.test(lines[i]) && lines[i].trim() !== "") {
+                        body.push(splitRow(lines[i]));
+                        i++;
+                    }
+                    var th = header.map(function (c) {
+                        return "<th>" + mdInline(escapeHtml(c)) + "</th>";
+                    }).join("");
+                    var trs = body.map(function (cells) {
+                        var tds = header.map(function (_, ci) {
+                            return "<td>" + mdInline(escapeHtml(cells[ci] == null ? "" : cells[ci])) + "</td>";
+                        }).join("");
+                        return "<tr>" + tds + "</tr>";
+                    }).join("");
+                    out.push('<div class="md-table-scroll"><table><thead><tr>' + th +
+                        "</tr></thead><tbody>" + trs + "</tbody></table></div>");
+                    continue;
+                }
 
-    // measures (y candidates): numeric, not x, not id/group-like
-    var measures = numCols.filter(function (c) { return c !== xCol && !ID_RE.test(c); });
-    if (measures.length === 0) measures = numCols.filter(function (c) { return c !== xCol; });
-    if (measures.length === 0) return null;
+                // heading
+                var hm = /^(#{1,4})\s+(.*)$/.exec(line);
+                if (hm) {
+                    var lvl = hm[1].length;
+                    out.push("<h" + lvl + ">" + mdInline(escapeHtml(hm[2])) + "</h" + lvl + ">");
+                    i++;
+                    continue;
+                }
 
-    // group candidates: other low-cardinality columns whose values repeat across x
-    var groupCols = cols.filter(function (c) {
-      if (c === xCol || measures.indexOf(c) >= 0) return false;
-      var dc = distinctCount(data, c);
-      return dc >= 2 && dc <= 12 && dc < data.length;
-    });
-    var groupCol = null;
-    if (groupCols.length) {
-      var named = groupCols.filter(function (c) { return GROUP_RE.test(c); });
-      groupCol = named.length
-        ? named[0]
-        : groupCols.slice().sort(function (a, b) { return distinctCount(data, a) - distinctCount(data, b); })[0];
-    }
+                // list (consecutive bullet or ordered items)
+                if (/^\s*[-*]\s+/.test(line) || /^\s*\d+[.)]\s+/.test(line)) {
+                    var ordered = /^\s*\d+[.)]\s+/.test(line);
+                    var items = [];
+                    while (i < lines.length && (/^\s*[-*]\s+/.test(lines[i]) || /^\s*\d+[.)]\s+/.test(lines[i]))) {
+                        var item = lines[i].replace(/^\s*(?:[-*]|\d+[.)])\s+/, "");
+                        items.push("<li>" + mdInline(escapeHtml(item)) + "</li>");
+                        i++;
+                    }
+                    out.push((ordered ? "<ol>" : "<ul>") + items.join("") + (ordered ? "</ol>" : "</ul>"));
+                    continue;
+                }
 
-    var type = columnNumeric(data, xCol) || SEQ_RE.test(xCol) ? "line" : "bar";
-    return { type: type, xCol: xCol, yCols: measures, yCol: measures[0], groupCols: groupCols, groupCol: groupCol };
-  }
+                // blank line -> separator
+                if (line.trim() === "") {
+                    i++;
+                    continue;
+                }
 
-  function buildChart(rows) {
-    var spec = inferChart(rows);
-    if (!spec) return null;
-    var data = rows.rows || [];
+                // paragraph: gather consecutive non-empty, non-special lines
+                var para = [];
+                while (
+                    i < lines.length &&
+                    lines[i].trim() !== "" &&
+                    !/^(#{1,4})\s+/.test(lines[i]) &&
+                    !/^\s*[-*]\s+/.test(lines[i]) &&
+                    !/^\s*\d+[.)]\s+/.test(lines[i]) &&
+                    !(/\|/.test(lines[i]) && i + 1 < lines.length && isTableSep(lines[i + 1]))
+                    ) {
+                    para.push(mdInline(escapeHtml(lines[i])));
+                    i++;
+                }
+                out.push("<p>" + para.join("<br>") + "</p>");
+            }
+            return out.join("");
+        }
 
-    var d = el("details", "readout");
-    d.open = true;
-    var s = el("summary");
-    s.appendChild(el("span", "caret"));
-    s.appendChild(el("span", null, "图表"));
-    var meta = el("span", "summary-meta", spec.yCol);
-    s.appendChild(meta);
-    d.appendChild(s);
+        // ── render: user turn ─────────────────────────────────
+        function addUser(text) {
+            var n = el("div", "turn-user fade-in", text);
+            stream.appendChild(n);
+            scrollDown();
+        }
 
-    var panel = el("div", "panel");
-    var controls = el("div", "chart-controls");
-    var seg = el("div", "seg");
-    var bBar = el("button", null, "柱状"); bBar.type = "button";
-    var bLine = el("button", null, "折线"); bLine.type = "button";
-    seg.appendChild(bBar); seg.appendChild(bLine);
-    controls.appendChild(seg);
+        // ── render: thinking placeholder ──────────────────────
+        function addThinking() {
+            var card = el("div", "turn-agent fade-in");
+            card.setAttribute("data-status", "pending");
+            var head = el("div", "agent-head");
+            head.appendChild(el("span", "agent-name", "DB-Agent"));
+            card.appendChild(head);
+            var t = el("div", "thinking");
+            var lanes = el("span", "lanes");
+            for (var i = 0; i < 4; i++) lanes.appendChild(el("i"));
+            t.appendChild(lanes);
+            t.appendChild(el("span", null, "正在检索并生成 SQL…"));
+            card.appendChild(t);
+            stream.appendChild(card);
+            scrollDown();
+            return card;
+        }
 
-    var sel = null;
-    if (spec.yCols.length > 1) {
-      controls.appendChild(el("span", "ctl-label", "指标"));
-      sel = el("select");
-      spec.yCols.forEach(function (c) {
-        var o = el("option", null, c); o.value = c; sel.appendChild(o);
-      });
-      sel.value = spec.yCol;
-      controls.appendChild(sel);
-    }
+        // ── render: agent answer ──────────────────────────────
+        function fillAgent(card, data) {
+            card.innerHTML = "";
+            var status = data.status || "error";
+            card.setAttribute("data-status", status);
 
-    var gsel = null;
-    if (spec.groupCols && spec.groupCols.length) {
-      controls.appendChild(el("span", "ctl-label", "分组"));
-      gsel = el("select");
-      var none = el("option", null, "不分组"); none.value = "__none__"; gsel.appendChild(none);
-      spec.groupCols.forEach(function (c) {
-        var o = el("option", null, c); o.value = c; gsel.appendChild(o);
-      });
-      gsel.value = spec.groupCol || "__none__";
-      controls.appendChild(gsel);
-    }
-    panel.appendChild(controls);
-    var host = el("div", "chart-host");
-    panel.appendChild(host);
-    d.appendChild(panel);
+            var head = el("div", "agent-head");
+            head.appendChild(el("span", "agent-name", "DB-Agent"));
+            var badgeText = status === "answered" ? "已回答" : status === "clarify" ? "需澄清" : "出错";
+            head.appendChild(el("span", "badge " + status, badgeText));
+            card.appendChild(head);
 
-    var state = { type: spec.type, yCol: spec.yCol, groupCol: spec.groupCol || "__none__" };
-    function sync() {
-      bBar.setAttribute("aria-pressed", String(state.type === "bar"));
-      bLine.setAttribute("aria-pressed", String(state.type === "line"));
-      var grouped = state.type === "line" && state.groupCol !== "__none__";
-      meta.textContent = state.yCol + (grouped ? " · 按 " + state.groupCol : "");
-      renderChart(host, panel, data, spec.xCol, state.yCol, state.type, state.groupCol);
-    }
-    bBar.addEventListener("click", function () { state.type = "bar"; sync(); });
-    bLine.addEventListener("click", function () { state.type = "line"; sync(); });
-    if (sel) sel.addEventListener("change", function () { state.yCol = sel.value; sync(); });
-    if (gsel) gsel.addEventListener("change", function () { state.groupCol = gsel.value; sync(); });
-    sync();
-    return d;
-  }
+            if (status === "clarify") {
+                card.appendChild(el("div", "answer clarify-text", data.clarification || "需要更多信息才能继续。"));
+                card.appendChild(el("div", "clarify-hint", "补充上面的细节后再问一次即可。"));
+                return;
+            }
+            if (status === "error") {
+                card.appendChild(el("div", "answer error-text", data.error || "查询未能完成。"));
+                card.appendChild(el("div", "error-hint", "可以换种问法，或缩小范围后重试。"));
+                return;
+            }
 
-  var SERIES_COLORS = ["#0c6e63", "#2f5c8f", "#946410", "#a23a33", "#5a7d3c", "#7a4f9e", "#b5651d", "#3a7ca5"];
+            // answered
+            var ans = el("div", "answer answer-md");
+            ans.innerHTML = renderMarkdown(data.answer || "（无文字答案）");
+            card.appendChild(ans);
 
-  function renderChart(host, panel, data, xCol, yCol, type, groupCol) {
-    host.innerHTML = "";
-    var prevNote = panel.querySelector(".chart-note");
-    if (prevNote) prevNote.remove();
+            // Per-domain sections: results[] holds one section (single domain) or several
+            // (multi-domain fan-out). Fall back to the legacy top-level sql/rows if absent.
+            var sections = (data.results && data.results.length)
+                ? data.results
+                : [{domain: null, label: null, sql: data.sql, rows: data.rows}];
+            var multi = sections.length > 1;
+            sections.forEach(function (sec) {
+                card.appendChild(buildSection(sec, multi));
+            });
+        }
 
-    if (type === "line" && groupCol && groupCol !== "__none__") {
-      return renderMultiLine(host, panel, data, xCol, yCol, groupCol);
-    }
+        function buildSection(sec, labelled) {
+            var box = el("div", "result-domain");
+            if (labelled && (sec.label || sec.domain)) {
+                box.appendChild(el("div", "domain-label", sec.label || sec.domain));
+            }
+            if (sec.clarification) {
+                box.appendChild(el("div", "answer clarify-text", sec.clarification));
+                return box;
+            }
+            if (sec.error) {
+                box.appendChild(el("div", "answer error-text", "该类数据查询出错：" + sec.error));
+                return box;
+            }
+            if (sec.sql) box.appendChild(buildSql(sec.sql));
+            var chart = sec.rows ? buildChart(sec.rows) : null;
+            if (chart) box.appendChild(chart);
+            // when a chart is shown, the table starts collapsed (chart is the headline)
+            if (sec.rows) box.appendChild(buildTable(sec.rows, !chart));
+            return box;
+        }
 
-    var pts = [];
-    for (var i = 0; i < data.length; i++) {
-      var y = asNum(data[i][yCol]);
-      if (y === null) continue;
-      var lv = data[i][xCol];
-      pts.push({ label: lv == null ? "—" : String(lv), y: y });
-    }
-    if (!pts.length) { host.appendChild(el("div", "chart-note", "无可绘制的数值。")); return; }
+        function buildSql(sql) {
+            var d = el("details", "readout");
+            var s = el("summary");
+            s.appendChild(el("span", "caret"));
+            s.appendChild(el("span", null, "查看 SQL"));
+            d.appendChild(s);
+            var wrap = el("div", "panel sql-wrap");
+            var pre = el("pre", "sql", sql);
+            var copy = el("button", "copy-btn", "复制");
+            copy.type = "button";
+            copy.addEventListener("click", function () {
+                navigator.clipboard && navigator.clipboard.writeText(sql).then(function () {
+                    copy.textContent = "已复制";
+                    setTimeout(function () {
+                        copy.textContent = "复制";
+                    }, 1400);
+                });
+            });
+            wrap.appendChild(pre);
+            wrap.appendChild(copy);
+            d.appendChild(wrap);
+            return d;
+        }
 
-    var capped = false;
-    var cap = type === "bar" ? 40 : 160;
-    if (pts.length > cap) { pts = pts.slice(0, cap); capped = true; }
+        function buildTable(rows, openByDefault) {
+            var d = el("details", "readout");
+            var s = el("summary");
+            s.appendChild(el("span", "caret"));
+            s.appendChild(el("span", null, "结果表"));
+            var meta = el("span", "summary-meta", rows.rowcount + " 行" + (rows.truncated ? " · 已截断" : ""));
+            s.appendChild(meta);
+            d.appendChild(s);
+            d.open = openByDefault !== false;
 
-    var W = 680, H = 280, pad = { l: 48, r: 14, t: 14, b: 52 };
-    var pw = W - pad.l - pad.r, ph = H - pad.t - pad.b, n = pts.length;
-    var ys = pts.map(function (p) { return p.y; });
-    var ymin = Math.min(0, Math.min.apply(null, ys));
-    var ymax = Math.max.apply(null, ys);
-    if (ymax === ymin) ymax = ymin + 1;
-    function yPix(v) { return pad.t + ph * (1 - (v - ymin) / (ymax - ymin)); }
-    var zeroY = yPix(0);
-    var step = pw / n;
-    var rotate = n > 8;
-    var labelEvery = Math.ceil(n / (rotate ? 24 : 12));
+            var panel = el("div", "panel");
+            var scroll = el("div", "table-scroll");
+            var table = el("table", "result");
+            var cols = rows.columns || [];
 
-    var svg = sv("svg", { viewBox: "0 0 " + W + " " + H, preserveAspectRatio: "xMidYMid meet", role: "img" });
+            var thead = el("thead");
+            var hr = el("tr");
+            cols.forEach(function (c) {
+                hr.appendChild(el("th", null, c));
+            });
+            thead.appendChild(hr);
+            table.appendChild(thead);
 
-    for (var t = 0; t <= 4; t++) {
-      var val = ymin + (ymax - ymin) * t / 4;
-      var gy = yPix(val);
-      svg.appendChild(sv("line", { class: "grid", x1: pad.l, y1: gy, x2: W - pad.r, y2: gy }));
-      var tk = sv("text", { class: "tick", x: pad.l - 6, y: gy + 3, "text-anchor": "end" });
-      tk.textContent = fmt(val);
-      svg.appendChild(tk);
-    }
-    svg.appendChild(sv("line", { class: "axis", x1: pad.l, y1: pad.t, x2: pad.l, y2: pad.t + ph }));
+            var tbody = el("tbody");
+            var data = rows.rows || [];
+            var shown = Math.min(data.length, MAX_TABLE_ROWS);
+            for (var i = 0; i < shown; i++) {
+                var tr = el("tr");
+                cols.forEach(function (c) {
+                    var v = data[i][c];
+                    if (v == null) {
+                        tr.appendChild(el("td", "nullcell", "—"));
+                    } else {
+                        tr.appendChild(el("td", null, String(v)));
+                    }
+                });
+                tbody.appendChild(tr);
+            }
+            table.appendChild(tbody);
+            scroll.appendChild(table);
+            panel.appendChild(scroll);
 
-    if (type === "bar") {
-      var bw = Math.max(2, step * 0.62);
-      pts.forEach(function (p, idx) {
-        var cx = pad.l + step * idx + step / 2;
-        var yv = yPix(p.y);
-        var rect = sv("rect", {
-          class: "bar", x: cx - bw / 2, y: Math.min(yv, zeroY),
-          width: bw, height: Math.max(1, Math.abs(yv - zeroY)), rx: 2
+            if (data.length > shown) {
+                panel.appendChild(el("div", "rowcap-note", "为浏览流畅，仅显示前 " + shown + " 行（共 " + data.length + " 行返回）。"));
+            }
+            d.appendChild(panel);
+
+            if (rows.truncated) {
+                var flag = el("div", "truncated-flag");
+                flag.appendChild(el("span", null, "⚠"));
+                flag.appendChild(el("span", null, "结果在服务端已按上限截断，可能不完整。"));
+                d.appendChild(flag);
+            }
+            return d;
+        }
+
+        // ── chart inference + SVG rendering ───────────────────
+        var SVGNS = "http://www.w3.org/2000/svg";
+
+        function sv(tag, attrs) {
+            var n = document.createElementNS(SVGNS, tag);
+            if (attrs) for (var k in attrs) n.setAttribute(k, attrs[k]);
+            return n;
+        }
+
+        function asNum(v) {
+            if (typeof v === "number" && isFinite(v)) return v;
+            if (typeof v === "string" && v.trim() !== "" && !isNaN(Number(v))) return Number(v);
+            return null;
+        }
+
+        function columnNumeric(data, col) {
+            var seen = false;
+            for (var i = 0; i < data.length; i++) {
+                var v = data[i][col];
+                if (v == null) continue;
+                if (asNum(v) === null) return false;
+                seen = true;
+            }
+            return seen;
+        }
+
+        function fmt(n) {
+            var a = Math.abs(n);
+            if (a >= 1e9) return (n / 1e9).toFixed(1).replace(/\.0$/, "") + "B";
+            if (a >= 1e6) return (n / 1e6).toFixed(1).replace(/\.0$/, "") + "M";
+            if (a >= 1e3) return (n / 1e3).toFixed(1).replace(/\.0$/, "") + "k";
+            if (a > 0 && a < 1) return n.toFixed(2);
+            return String(Math.round(n * 100) / 100);
+        }
+
+        // column-name hints
+        var ID_RE = /(^|_)(id|no|num|gid|group|arm|cohort)(_|$)|编号|分组|组别|代次/i;
+        var GROUP_RE = /group|arm|cohort|组|代次/i;
+        var SEQ_RE = /day|time|week|month|date|hour|cycle|timepoint|天|周|月|日|时间|周期|代次/i;
+
+        function distinctCount(data, col) {
+            var seen = {}, n = 0;
+            for (var i = 0; i < data.length; i++) {
+                var v = data[i][col];
+                var key = v == null ? " " : String(v);
+                if (!(key in seen)) {
+                    seen[key] = 1;
+                    n++;
+                }
+            }
+            return n;
+        }
+
+        // Decide whether a result set is chartable and how. Heuristic, domain-tuned:
+        //   · need a label/x column + at least one numeric MEASURE column, and >= 2 rows
+        //   · a sequential x (numeric, or a name hinting day/time/cycle) -> line (trends)
+        //   · otherwise a categorical comparison -> bar
+        //   · a second low-cardinality column (group_id, arm, …) -> split a line into series
+        function inferChart(rows) {
+            var cols = rows.columns || [];
+            var data = rows.rows || [];
+            if (data.length < 2 || cols.length < 2) return null;
+            var numCols = cols.filter(function (c) {
+                return columnNumeric(data, c);
+            });
+            if (numCols.length === 0) return null;
+            var catCols = cols.filter(function (c) {
+                return numCols.indexOf(c) < 0;
+            });
+            // x-axis: a sequence column (day/cycle/…) wins even when it's numeric and a
+            // categorical group column is also present — that's the growth-curve shape.
+            var seqCols = cols.filter(function (c) {
+                return SEQ_RE.test(c);
+            });
+            var xCol = seqCols.length ? seqCols[0] : catCols.length ? catCols[0] : cols[0];
+
+            // measures (y candidates): numeric, not x, not id/group-like
+            var measures = numCols.filter(function (c) {
+                return c !== xCol && !ID_RE.test(c);
+            });
+            if (measures.length === 0) measures = numCols.filter(function (c) {
+                return c !== xCol;
+            });
+            if (measures.length === 0) return null;
+
+            // group candidates: other low-cardinality columns whose values repeat across x
+            var groupCols = cols.filter(function (c) {
+                if (c === xCol || measures.indexOf(c) >= 0) return false;
+                var dc = distinctCount(data, c);
+                return dc >= 2 && dc <= 12 && dc < data.length;
+            });
+            var groupCol = null;
+            if (groupCols.length) {
+                var named = groupCols.filter(function (c) {
+                    return GROUP_RE.test(c);
+                });
+                groupCol = named.length
+                    ? named[0]
+                    : groupCols.slice().sort(function (a, b) {
+                        return distinctCount(data, a) - distinctCount(data, b);
+                    })[0];
+            }
+
+            var type = columnNumeric(data, xCol) || SEQ_RE.test(xCol) ? "line" : "bar";
+            return {
+                type: type,
+                xCol: xCol,
+                yCols: measures,
+                yCol: measures[0],
+                groupCols: groupCols,
+                groupCol: groupCol
+            };
+        }
+
+        function buildChart(rows) {
+            var spec = inferChart(rows);
+            if (!spec) return null;
+            var data = rows.rows || [];
+
+            var d = el("details", "readout");
+            d.open = true;
+            var s = el("summary");
+            s.appendChild(el("span", "caret"));
+            s.appendChild(el("span", null, "图表"));
+            var meta = el("span", "summary-meta", spec.yCol);
+            s.appendChild(meta);
+            d.appendChild(s);
+
+            var panel = el("div", "panel");
+            var controls = el("div", "chart-controls");
+            var seg = el("div", "seg");
+            var bBar = el("button", null, "柱状");
+            bBar.type = "button";
+            var bLine = el("button", null, "折线");
+            bLine.type = "button";
+            seg.appendChild(bBar);
+            seg.appendChild(bLine);
+            controls.appendChild(seg);
+
+            var sel = null;
+            if (spec.yCols.length > 1) {
+                controls.appendChild(el("span", "ctl-label", "指标"));
+                sel = el("select");
+                spec.yCols.forEach(function (c) {
+                    var o = el("option", null, c);
+                    o.value = c;
+                    sel.appendChild(o);
+                });
+                sel.value = spec.yCol;
+                controls.appendChild(sel);
+            }
+
+            var gsel = null;
+            if (spec.groupCols && spec.groupCols.length) {
+                controls.appendChild(el("span", "ctl-label", "分组"));
+                gsel = el("select");
+                var none = el("option", null, "不分组");
+                none.value = "__none__";
+                gsel.appendChild(none);
+                spec.groupCols.forEach(function (c) {
+                    var o = el("option", null, c);
+                    o.value = c;
+                    gsel.appendChild(o);
+                });
+                gsel.value = spec.groupCol || "__none__";
+                controls.appendChild(gsel);
+            }
+            panel.appendChild(controls);
+            var host = el("div", "chart-host");
+            panel.appendChild(host);
+            d.appendChild(panel);
+
+            var state = {type: spec.type, yCol: spec.yCol, groupCol: spec.groupCol || "__none__"};
+
+            function sync() {
+                bBar.setAttribute("aria-pressed", String(state.type === "bar"));
+                bLine.setAttribute("aria-pressed", String(state.type === "line"));
+                var grouped = state.type === "line" && state.groupCol !== "__none__";
+                meta.textContent = state.yCol + (grouped ? " · 按 " + state.groupCol : "");
+                renderChart(host, panel, data, spec.xCol, state.yCol, state.type, state.groupCol);
+            }
+
+            bBar.addEventListener("click", function () {
+                state.type = "bar";
+                sync();
+            });
+            bLine.addEventListener("click", function () {
+                state.type = "line";
+                sync();
+            });
+            if (sel) sel.addEventListener("change", function () {
+                state.yCol = sel.value;
+                sync();
+            });
+            if (gsel) gsel.addEventListener("change", function () {
+                state.groupCol = gsel.value;
+                sync();
+            });
+            sync();
+            return d;
+        }
+
+        var SERIES_COLORS = ["#0c6e63", "#2f5c8f", "#946410", "#a23a33", "#5a7d3c", "#7a4f9e", "#b5651d", "#3a7ca5"];
+
+        function renderChart(host, panel, data, xCol, yCol, type, groupCol) {
+            host.innerHTML = "";
+            var prevNote = panel.querySelector(".chart-note");
+            if (prevNote) prevNote.remove();
+
+            if (type === "line" && groupCol && groupCol !== "__none__") {
+                return renderMultiLine(host, panel, data, xCol, yCol, groupCol);
+            }
+
+            var pts = [];
+            for (var i = 0; i < data.length; i++) {
+                var y = asNum(data[i][yCol]);
+                if (y === null) continue;
+                var lv = data[i][xCol];
+                pts.push({label: lv == null ? "—" : String(lv), y: y});
+            }
+            if (!pts.length) {
+                host.appendChild(el("div", "chart-note", "无可绘制的数值。"));
+                return;
+            }
+
+            var capped = false;
+            var cap = type === "bar" ? 40 : 160;
+            if (pts.length > cap) {
+                pts = pts.slice(0, cap);
+                capped = true;
+            }
+
+            var W = 680, H = 280, pad = {l: 48, r: 14, t: 14, b: 52};
+            var pw = W - pad.l - pad.r, ph = H - pad.t - pad.b, n = pts.length;
+            var ys = pts.map(function (p) {
+                return p.y;
+            });
+            var ymin = Math.min(0, Math.min.apply(null, ys));
+            var ymax = Math.max.apply(null, ys);
+            if (ymax === ymin) ymax = ymin + 1;
+
+            function yPix(v) {
+                return pad.t + ph * (1 - (v - ymin) / (ymax - ymin));
+            }
+
+            var zeroY = yPix(0);
+            var step = pw / n;
+            var rotate = n > 8;
+            var labelEvery = Math.ceil(n / (rotate ? 24 : 12));
+
+            var svg = sv("svg", {viewBox: "0 0 " + W + " " + H, preserveAspectRatio: "xMidYMid meet", role: "img"});
+
+            for (var t = 0; t <= 4; t++) {
+                var val = ymin + (ymax - ymin) * t / 4;
+                var gy = yPix(val);
+                svg.appendChild(sv("line", {class: "grid", x1: pad.l, y1: gy, x2: W - pad.r, y2: gy}));
+                var tk = sv("text", {class: "tick", x: pad.l - 6, y: gy + 3, "text-anchor": "end"});
+                tk.textContent = fmt(val);
+                svg.appendChild(tk);
+            }
+            svg.appendChild(sv("line", {class: "axis", x1: pad.l, y1: pad.t, x2: pad.l, y2: pad.t + ph}));
+
+            if (type === "bar") {
+                var bw = Math.max(2, step * 0.62);
+                pts.forEach(function (p, idx) {
+                    var cx = pad.l + step * idx + step / 2;
+                    var yv = yPix(p.y);
+                    var rect = sv("rect", {
+                        class: "bar", x: cx - bw / 2, y: Math.min(yv, zeroY),
+                        width: bw, height: Math.max(1, Math.abs(yv - zeroY)), rx: 2
+                    });
+                    var tt = sv("title");
+                    tt.textContent = p.label + ": " + fmt(p.y);
+                    rect.appendChild(tt);
+                    svg.appendChild(rect);
+                });
+            } else {
+                var coords = pts.map(function (p, idx) {
+                    return {x: pad.l + step * idx + step / 2, y: yPix(p.y)};
+                });
+                var lineD = coords.map(function (c, idx) {
+                    return (idx ? "L" : "M") + c.x.toFixed(1) + " " + c.y.toFixed(1);
+                }).join(" ");
+                var areaD = "M" + coords[0].x.toFixed(1) + " " + zeroY.toFixed(1) + " "
+                    + coords.map(function (c) {
+                        return "L" + c.x.toFixed(1) + " " + c.y.toFixed(1);
+                    }).join(" ")
+                    + " L" + coords[n - 1].x.toFixed(1) + " " + zeroY.toFixed(1) + " Z";
+                svg.appendChild(sv("path", {class: "area", d: areaD}));
+                svg.appendChild(sv("path", {class: "line", d: lineD}));
+                coords.forEach(function (c, idx) {
+                    var dot = sv("circle", {class: "dot", cx: c.x, cy: c.y, r: 3});
+                    var tt = sv("title");
+                    tt.textContent = pts[idx].label + ": " + fmt(pts[idx].y);
+                    dot.appendChild(tt);
+                    svg.appendChild(dot);
+                });
+            }
+
+            pts.forEach(function (p, idx) {
+                if (idx % labelEvery !== 0 && idx !== n - 1) return;
+                var cx = pad.l + step * idx + step / 2;
+                var lab = p.label.length > 10 ? p.label.slice(0, 9) + "…" : p.label;
+                var baseY = pad.t + ph + (rotate ? 10 : 14);
+                var tEl = sv("text", {class: "xlab", x: cx, y: baseY});
+                if (rotate) {
+                    tEl.setAttribute("text-anchor", "end");
+                    tEl.setAttribute("transform", "rotate(-38 " + cx + " " + baseY + ")");
+                } else {
+                    tEl.setAttribute("text-anchor", "middle");
+                }
+                tEl.textContent = lab;
+                svg.appendChild(tEl);
+            });
+
+            host.appendChild(svg);
+            if (capped) panel.appendChild(el("div", "chart-note", "图表仅展示前 " + n + " 个数据点。"));
+        }
+
+        function renderMultiLine(host, panel, data, xCol, yCol, groupCol) {
+            var xIndex = {}, xs = [], groups = {}, gorder = [];
+            for (var i = 0; i < data.length; i++) {
+                var y = asNum(data[i][yCol]);
+                if (y === null) continue;
+                var xv = data[i][xCol] == null ? "—" : String(data[i][xCol]);
+                if (!(xv in xIndex)) {
+                    xIndex[xv] = xs.length;
+                    xs.push(xv);
+                }
+                var g = data[i][groupCol] == null ? "—" : String(data[i][groupCol]);
+                if (!(g in groups)) {
+                    groups[g] = [];
+                    gorder.push(g);
+                }
+                groups[g].push({xi: xIndex[xv], y: y});
+            }
+            if (!xs.length || !gorder.length) {
+                host.appendChild(el("div", "chart-note", "无可绘制的数值。"));
+                return;
+            }
+            var cappedG = false;
+            if (gorder.length > 8) {
+                gorder = gorder.slice(0, 8);
+                cappedG = true;
+            }
+
+            var W = 680, H = 292, pad = {l: 48, r: 14, t: 14, b: 52};
+            var pw = W - pad.l - pad.r, ph = H - pad.t - pad.b, nx = xs.length;
+            var allY = [];
+            gorder.forEach(function (g) {
+                groups[g].forEach(function (p) {
+                    allY.push(p.y);
+                });
+            });
+            var ymin = Math.min(0, Math.min.apply(null, allY)), ymax = Math.max.apply(null, allY);
+            if (ymax === ymin) ymax = ymin + 1;
+
+            function yPix(v) {
+                return pad.t + ph * (1 - (v - ymin) / (ymax - ymin));
+            }
+
+            var step = pw / nx;
+
+            function xPix(xi) {
+                return pad.l + step * xi + step / 2;
+            }
+
+            var rotate = nx > 8, labelEvery = Math.ceil(nx / (rotate ? 24 : 12));
+
+            var legend = el("div", "chart-legend");
+            gorder.forEach(function (g, gi) {
+                var sp = el("span");
+                var sw = el("i");
+                sw.style.background = SERIES_COLORS[gi % SERIES_COLORS.length];
+                sp.appendChild(sw);
+                sp.appendChild(el("span", null, g.length > 18 ? g.slice(0, 17) + "…" : g));
+                legend.appendChild(sp);
+            });
+            host.appendChild(legend);
+
+            var svg = sv("svg", {viewBox: "0 0 " + W + " " + H, preserveAspectRatio: "xMidYMid meet", role: "img"});
+            for (var t = 0; t <= 4; t++) {
+                var val = ymin + (ymax - ymin) * t / 4, gy = yPix(val);
+                svg.appendChild(sv("line", {class: "grid", x1: pad.l, y1: gy, x2: W - pad.r, y2: gy}));
+                var tk = sv("text", {class: "tick", x: pad.l - 6, y: gy + 3, "text-anchor": "end"});
+                tk.textContent = fmt(val);
+                svg.appendChild(tk);
+            }
+            svg.appendChild(sv("line", {class: "axis", x1: pad.l, y1: pad.t, x2: pad.l, y2: pad.t + ph}));
+
+            gorder.forEach(function (g, gi) {
+                var color = SERIES_COLORS[gi % SERIES_COLORS.length];
+                var seq = groups[g].slice().sort(function (a, b) {
+                    return a.xi - b.xi;
+                });
+                var dPath = seq.map(function (p, idx) {
+                    return (idx ? "L" : "M") + xPix(p.xi).toFixed(1) + " " + yPix(p.y).toFixed(1);
+                }).join(" ");
+                svg.appendChild(sv("path", {
+                    d: dPath, fill: "none", stroke: color,
+                    "stroke-width": 2, "stroke-linejoin": "round", "stroke-linecap": "round"
+                }));
+                seq.forEach(function (p) {
+                    var c = sv("circle", {
+                        cx: xPix(p.xi),
+                        cy: yPix(p.y),
+                        r: 2.6,
+                        fill: "#fcfcfb",
+                        stroke: color,
+                        "stroke-width": 1.5
+                    });
+                    var tt = sv("title");
+                    tt.textContent = g + " · " + xs[p.xi] + ": " + fmt(p.y);
+                    c.appendChild(tt);
+                    svg.appendChild(c);
+                });
+            });
+
+            xs.forEach(function (xv, idx) {
+                if (idx % labelEvery !== 0 && idx !== nx - 1) return;
+                var cx = xPix(idx), lab = xv.length > 10 ? xv.slice(0, 9) + "…" : xv,
+                    baseY = pad.t + ph + (rotate ? 10 : 14);
+                var tEl = sv("text", {class: "xlab", x: cx, y: baseY});
+                if (rotate) {
+                    tEl.setAttribute("text-anchor", "end");
+                    tEl.setAttribute("transform", "rotate(-38 " + cx + " " + baseY + ")");
+                } else {
+                    tEl.setAttribute("text-anchor", "middle");
+                }
+                tEl.textContent = lab;
+                svg.appendChild(tEl);
+            });
+
+            host.appendChild(svg);
+            if (cappedG) panel.appendChild(el("div", "chart-note", "仅展示前 8 个分组。"));
+        }
+
+        // ── live streaming answer area ────────────────────────
+        // Before the final payload arrives we show tokens as they stream. The final
+        // event re-renders the card authoritatively (badge / SQL / table / chart).
+        function startLiveAnswer(card) {
+            card.innerHTML = "";
+            card.setAttribute("data-status", "answered");
+            var head = el("div", "agent-head");
+            head.appendChild(el("span", "agent-name", "DB-Agent"));
+            card.appendChild(head);
+            var ans = el("div", "answer");
+            card.appendChild(ans);
+            return ans;
+        }
+
+        // ── send flow (SSE streaming) ─────────────────────────
+        function ask(text) {
+            text = (text || "").trim();
+            if (!text || busy) return;
+            busy = true;
+            setSendEnabled();
+            dismissEmpty();
+            addUser(text);
+            ta.value = "";
+            autosize();
+            var card = addThinking();
+            streamQuery(text, card)
+                .catch(function () {
+                    fillAgent(card, {status: "error", error: "无法连接到服务，请确认后端正在运行后重试。"});
+                })
+                .finally(function () {
+                    busy = false;
+                    setSendEnabled();
+                    scrollDown();
+                    ta.focus();
+                });
+        }
+
+        function streamQuery(text, card) {
+            return fetch("/query/stream", {
+                method: "POST",
+                headers: {"Content-Type": "application/json"},
+                body: JSON.stringify({question: text})
+            }).then(function (r) {
+                if (!r.ok || !r.body) {
+                    return r.text().then(function () {
+                        fillAgent(card, {status: "error", error: "服务端返回错误（HTTP " + r.status + "）。"});
+                    });
+                }
+                var reader = r.body.getReader();
+                var decoder = new TextDecoder();
+                var buf = "";
+                var answerEl = null;
+                var acc = "";
+
+                function onEvent(evt) {
+                    if (evt.type === "token") {
+                        if (!answerEl) answerEl = startLiveAnswer(card);
+                        acc += evt.text;
+                        answerEl.textContent = acc;
+                        scrollDown();
+                    } else if (evt.type === "final") {
+                        fillAgent(card, evt.payload);
+                    } else if (evt.type === "error") {
+                        fillAgent(card, {status: "error", error: evt.detail});
+                    }
+                }
+
+                function pump() {
+                    return reader.read().then(function (res) {
+                        if (res.done) {
+                            return;
+                        }
+                        buf += decoder.decode(res.value, {stream: true});
+                        var frames = buf.split("\n\n");
+                        buf = frames.pop(); // keep the trailing partial frame
+                        frames.forEach(function (frame) {
+                            var line = frame.trim();
+                            if (line.indexOf("data:") !== 0) return;
+                            var payload = line.slice(5).trim();
+                            if (!payload) return;
+                            try {
+                                onEvent(JSON.parse(payload));
+                            } catch (e) { /* ignore malformed frame */
+                            }
+                        });
+                        return pump();
+                    });
+                }
+
+                return pump();
+            });
+        }
+
+        // ── composer behaviour ────────────────────────────────
+        function autosize() {
+            ta.style.height = "auto";
+            ta.style.height = Math.min(ta.scrollHeight, 168) + "px";
+        }
+
+        function setSendEnabled() {
+            sendBtn.disabled = busy || ta.value.trim() === "";
+        }
+
+        ta.addEventListener("input", function () {
+            autosize();
+            setSendEnabled();
         });
-        var tt = sv("title"); tt.textContent = p.label + ": " + fmt(p.y); rect.appendChild(tt);
-        svg.appendChild(rect);
-      });
-    } else {
-      var coords = pts.map(function (p, idx) {
-        return { x: pad.l + step * idx + step / 2, y: yPix(p.y) };
-      });
-      var lineD = coords.map(function (c, idx) {
-        return (idx ? "L" : "M") + c.x.toFixed(1) + " " + c.y.toFixed(1);
-      }).join(" ");
-      var areaD = "M" + coords[0].x.toFixed(1) + " " + zeroY.toFixed(1) + " "
-        + coords.map(function (c) { return "L" + c.x.toFixed(1) + " " + c.y.toFixed(1); }).join(" ")
-        + " L" + coords[n - 1].x.toFixed(1) + " " + zeroY.toFixed(1) + " Z";
-      svg.appendChild(sv("path", { class: "area", d: areaD }));
-      svg.appendChild(sv("path", { class: "line", d: lineD }));
-      coords.forEach(function (c, idx) {
-        var dot = sv("circle", { class: "dot", cx: c.x, cy: c.y, r: 3 });
-        var tt = sv("title"); tt.textContent = pts[idx].label + ": " + fmt(pts[idx].y); dot.appendChild(tt);
-        svg.appendChild(dot);
-      });
-    }
+        ta.addEventListener("keydown", function (e) {
+            if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                ask(ta.value);
+            }
+        });
+        sendBtn.addEventListener("click", function () {
+            ask(ta.value);
+        });
 
-    pts.forEach(function (p, idx) {
-      if (idx % labelEvery !== 0 && idx !== n - 1) return;
-      var cx = pad.l + step * idx + step / 2;
-      var lab = p.label.length > 10 ? p.label.slice(0, 9) + "…" : p.label;
-      var baseY = pad.t + ph + (rotate ? 10 : 14);
-      var tEl = sv("text", { class: "xlab", x: cx, y: baseY });
-      if (rotate) {
-        tEl.setAttribute("text-anchor", "end");
-        tEl.setAttribute("transform", "rotate(-38 " + cx + " " + baseY + ")");
-      } else {
-        tEl.setAttribute("text-anchor", "middle");
-      }
-      tEl.textContent = lab;
-      svg.appendChild(tEl);
-    });
+        // ── example chips ─────────────────────────────────────
+        EXAMPLES.forEach(function (q) {
+            var c = el("button", "chip", q);
+            c.type = "button";
+            c.addEventListener("click", function () {
+                ask(q);
+            });
+            chips.appendChild(c);
+        });
 
-    host.appendChild(svg);
-    if (capped) panel.appendChild(el("div", "chart-note", "图表仅展示前 " + n + " 个数据点。"));
-  }
+        // ── health probe ──────────────────────────────────────
+        (function probe() {
+            var h = document.getElementById("health");
+            var label = document.getElementById("health-label");
+            fetch("/health")
+                .then(function (r) {
+                    return r.ok ? r.json() : Promise.reject();
+                })
+                .then(function () {
+                    h.setAttribute("data-state", "up");
+                    label.textContent = "在线";
+                })
+                .catch(function () {
+                    h.setAttribute("data-state", "down");
+                    label.textContent = "离线";
+                });
+        })();
 
-  function renderMultiLine(host, panel, data, xCol, yCol, groupCol) {
-    var xIndex = {}, xs = [], groups = {}, gorder = [];
-    for (var i = 0; i < data.length; i++) {
-      var y = asNum(data[i][yCol]);
-      if (y === null) continue;
-      var xv = data[i][xCol] == null ? "—" : String(data[i][xCol]);
-      if (!(xv in xIndex)) { xIndex[xv] = xs.length; xs.push(xv); }
-      var g = data[i][groupCol] == null ? "—" : String(data[i][groupCol]);
-      if (!(g in groups)) { groups[g] = []; gorder.push(g); }
-      groups[g].push({ xi: xIndex[xv], y: y });
-    }
-    if (!xs.length || !gorder.length) { host.appendChild(el("div", "chart-note", "无可绘制的数值。")); return; }
-    var cappedG = false;
-    if (gorder.length > 8) { gorder = gorder.slice(0, 8); cappedG = true; }
-
-    var W = 680, H = 292, pad = { l: 48, r: 14, t: 14, b: 52 };
-    var pw = W - pad.l - pad.r, ph = H - pad.t - pad.b, nx = xs.length;
-    var allY = [];
-    gorder.forEach(function (g) { groups[g].forEach(function (p) { allY.push(p.y); }); });
-    var ymin = Math.min(0, Math.min.apply(null, allY)), ymax = Math.max.apply(null, allY);
-    if (ymax === ymin) ymax = ymin + 1;
-    function yPix(v) { return pad.t + ph * (1 - (v - ymin) / (ymax - ymin)); }
-    var step = pw / nx;
-    function xPix(xi) { return pad.l + step * xi + step / 2; }
-    var rotate = nx > 8, labelEvery = Math.ceil(nx / (rotate ? 24 : 12));
-
-    var legend = el("div", "chart-legend");
-    gorder.forEach(function (g, gi) {
-      var sp = el("span");
-      var sw = el("i"); sw.style.background = SERIES_COLORS[gi % SERIES_COLORS.length];
-      sp.appendChild(sw);
-      sp.appendChild(el("span", null, g.length > 18 ? g.slice(0, 17) + "…" : g));
-      legend.appendChild(sp);
-    });
-    host.appendChild(legend);
-
-    var svg = sv("svg", { viewBox: "0 0 " + W + " " + H, preserveAspectRatio: "xMidYMid meet", role: "img" });
-    for (var t = 0; t <= 4; t++) {
-      var val = ymin + (ymax - ymin) * t / 4, gy = yPix(val);
-      svg.appendChild(sv("line", { class: "grid", x1: pad.l, y1: gy, x2: W - pad.r, y2: gy }));
-      var tk = sv("text", { class: "tick", x: pad.l - 6, y: gy + 3, "text-anchor": "end" });
-      tk.textContent = fmt(val); svg.appendChild(tk);
-    }
-    svg.appendChild(sv("line", { class: "axis", x1: pad.l, y1: pad.t, x2: pad.l, y2: pad.t + ph }));
-
-    gorder.forEach(function (g, gi) {
-      var color = SERIES_COLORS[gi % SERIES_COLORS.length];
-      var seq = groups[g].slice().sort(function (a, b) { return a.xi - b.xi; });
-      var dPath = seq.map(function (p, idx) {
-        return (idx ? "L" : "M") + xPix(p.xi).toFixed(1) + " " + yPix(p.y).toFixed(1);
-      }).join(" ");
-      svg.appendChild(sv("path", {
-        d: dPath, fill: "none", stroke: color,
-        "stroke-width": 2, "stroke-linejoin": "round", "stroke-linecap": "round"
-      }));
-      seq.forEach(function (p) {
-        var c = sv("circle", { cx: xPix(p.xi), cy: yPix(p.y), r: 2.6, fill: "#fcfcfb", stroke: color, "stroke-width": 1.5 });
-        var tt = sv("title"); tt.textContent = g + " · " + xs[p.xi] + ": " + fmt(p.y); c.appendChild(tt);
-        svg.appendChild(c);
-      });
-    });
-
-    xs.forEach(function (xv, idx) {
-      if (idx % labelEvery !== 0 && idx !== nx - 1) return;
-      var cx = xPix(idx), lab = xv.length > 10 ? xv.slice(0, 9) + "…" : xv, baseY = pad.t + ph + (rotate ? 10 : 14);
-      var tEl = sv("text", { class: "xlab", x: cx, y: baseY });
-      if (rotate) {
-        tEl.setAttribute("text-anchor", "end");
-        tEl.setAttribute("transform", "rotate(-38 " + cx + " " + baseY + ")");
-      } else {
-        tEl.setAttribute("text-anchor", "middle");
-      }
-      tEl.textContent = lab; svg.appendChild(tEl);
-    });
-
-    host.appendChild(svg);
-    if (cappedG) panel.appendChild(el("div", "chart-note", "仅展示前 8 个分组。"));
-  }
-
-  // ── live streaming answer area ────────────────────────
-  // Before the final payload arrives we show tokens as they stream. The final
-  // event re-renders the card authoritatively (badge / SQL / table / chart).
-  function startLiveAnswer(card) {
-    card.innerHTML = "";
-    card.setAttribute("data-status", "answered");
-    var head = el("div", "agent-head");
-    head.appendChild(el("span", "agent-name", "DB-Agent"));
-    card.appendChild(head);
-    var ans = el("div", "answer");
-    card.appendChild(ans);
-    return ans;
-  }
-
-  // ── send flow (SSE streaming) ─────────────────────────
-  function ask(text) {
-    text = (text || "").trim();
-    if (!text || busy) return;
-    busy = true;
-    setSendEnabled();
-    dismissEmpty();
-    addUser(text);
-    ta.value = "";
-    autosize();
-    var card = addThinking();
-    streamQuery(text, card)
-      .catch(function () {
-        fillAgent(card, { status: "error", error: "无法连接到服务，请确认后端正在运行后重试。" });
-      })
-      .finally(function () {
-        busy = false;
         setSendEnabled();
-        scrollDown();
-        ta.focus();
-      });
-  }
-
-  function streamQuery(text, card) {
-    return fetch("/query/stream", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ question: text })
-    }).then(function (r) {
-      if (!r.ok || !r.body) {
-        return r.text().then(function () {
-          fillAgent(card, { status: "error", error: "服务端返回错误（HTTP " + r.status + "）。" });
-        });
-      }
-      var reader = r.body.getReader();
-      var decoder = new TextDecoder();
-      var buf = "";
-      var answerEl = null;
-      var acc = "";
-
-      function onEvent(evt) {
-        if (evt.type === "token") {
-          if (!answerEl) answerEl = startLiveAnswer(card);
-          acc += evt.text;
-          answerEl.textContent = acc;
-          scrollDown();
-        } else if (evt.type === "final") {
-          fillAgent(card, evt.payload);
-        } else if (evt.type === "error") {
-          fillAgent(card, { status: "error", error: evt.detail });
-        }
-      }
-
-      function pump() {
-        return reader.read().then(function (res) {
-          if (res.done) {
-            return;
-          }
-          buf += decoder.decode(res.value, { stream: true });
-          var frames = buf.split("\n\n");
-          buf = frames.pop(); // keep the trailing partial frame
-          frames.forEach(function (frame) {
-            var line = frame.trim();
-            if (line.indexOf("data:") !== 0) return;
-            var payload = line.slice(5).trim();
-            if (!payload) return;
-            try { onEvent(JSON.parse(payload)); } catch (e) { /* ignore malformed frame */ }
-          });
-          return pump();
-        });
-      }
-      return pump();
-    });
-  }
-
-  // ── composer behaviour ────────────────────────────────
-  function autosize() {
-    ta.style.height = "auto";
-    ta.style.height = Math.min(ta.scrollHeight, 168) + "px";
-  }
-  function setSendEnabled() {
-    sendBtn.disabled = busy || ta.value.trim() === "";
-  }
-  ta.addEventListener("input", function () { autosize(); setSendEnabled(); });
-  ta.addEventListener("keydown", function (e) {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      ask(ta.value);
-    }
-  });
-  sendBtn.addEventListener("click", function () { ask(ta.value); });
-
-  // ── example chips ─────────────────────────────────────
-  EXAMPLES.forEach(function (q) {
-    var c = el("button", "chip", q);
-    c.type = "button";
-    c.addEventListener("click", function () { ask(q); });
-    chips.appendChild(c);
-  });
-
-  // ── health probe ──────────────────────────────────────
-  (function probe() {
-    var h = document.getElementById("health");
-    var label = document.getElementById("health-label");
-    fetch("/health")
-      .then(function (r) { return r.ok ? r.json() : Promise.reject(); })
-      .then(function () { h.setAttribute("data-state", "up"); label.textContent = "在线"; })
-      .catch(function () { h.setAttribute("data-state", "down"); label.textContent = "离线"; });
-  })();
-
-  setSendEnabled();
-})();
+    })();
 </script>
 </body>
 </html>
