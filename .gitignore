@@ -222,3 +222,6 @@ models.py
 
 # Default observability JSONL sink (runtime artifact)
 logs/
+
+# VDR card index (build artifact)
+indexes/

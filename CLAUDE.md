@@ -242,8 +242,9 @@ src/db_agent/
   vdr/             # VDR QA card-RAG (Phase C, off until Settings.vdr_index_path). store.py
                    #   (CardStore cosine .npz), build.py (OFFLINE: de-sensitized FactCards from
                    #   the DB — public id, coarse attrs, avg latency, efficacy summary; never
-                   #   the uuid/raw rows — + CLI), retriever.py (embed+search+threshold; no-op
-                   #   default → live fallback). Injected via Deps.retrieve_cards. The vdr
+                   #   the uuid/raw rows — + batched-embed CLI), retriever.py (exact model_id
+                   #   match + embed/search/threshold; no-op default → live fallback). Injected
+                   #   via Deps.retrieve_cards. The vdr
                    #   worker grounds an answer (cited) when a card clears the threshold, else
                    #   falls back to the live explore engine (same for_bd='yes' rule).
   api/             # FastAPI: app.py (create_app, POST /query/stream [SSE], POST /recommend,

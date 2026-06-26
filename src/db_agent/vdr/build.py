@@ -100,6 +100,20 @@ def save_index(path: Path, vectors: np.ndarray, cards: list[FactCard]) -> None:
     )
 
 
+_EMBED_BATCH = 64
+
+
+def _embed_batched(
+    embed: Callable[[list[str]], list[list[float]]], texts: list[str], batch: int = _EMBED_BATCH
+) -> list[list[float]]:
+    """Embed in chunks: a single call with ~1000 model cards can exceed the gateway's
+    per-request batch/token limit, so split it (offline, so latency is unimportant)."""
+    out: list[list[float]] = []
+    for i in range(0, len(texts), batch):
+        out.extend(embed(texts[i : i + batch]))
+    return out
+
+
 def build_index(
     replica: ReadReplica,
     embed: Callable[[list[str]], list[list[float]]],
@@ -109,7 +123,8 @@ def build_index(
     if not cards:
         return 0
     # Embed "title: text" so both the model identity and its facts steer retrieval.
-    vectors = np.asarray(embed([f"{c.title}: {c.text}" for c in cards]), dtype=np.float32)
+    texts = [f"{c.title}: {c.text}" for c in cards]
+    vectors = np.asarray(_embed_batched(embed, texts), dtype=np.float32)
     save_index(out_path, vectors, cards)
     return len(cards)
 

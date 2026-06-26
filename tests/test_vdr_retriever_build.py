@@ -16,8 +16,13 @@ class _Embed:
 
 
 class _Store:
-    def __init__(self, hits):
+    def __init__(self, hits, cards=()):
         self._hits = hits
+        self._cards = list(cards)
+
+    @property
+    def cards(self):
+        return self._cards
 
     def search(self, vec, k):
         return self._hits[:k]
@@ -28,17 +33,30 @@ def test_retriever_keeps_cards_above_threshold():
     card_lo = FactCard("MC38", "t", "x")
     store = _Store([(card_hi, 0.8), (card_lo, 0.1)])
     retrieve = make_card_retriever(store, _Embed(), k=3, threshold=0.3)
-    cards = retrieve("CT26 的潜伏期？")
+    cards = retrieve("潜伏期怎么样？")  # no exact id mention
     assert [c.model_id for c in cards] == ["CT26"]  # the low-score card dropped
 
 
-def test_retriever_failsoft_on_embed_error():
+def test_retriever_surfaces_exact_model_id_even_if_semantic_misses():
+    # the named model's card must be returned even when cosine ranks neighbours higher
+    target = FactCard("YK-CRC-032", "t", "x")
+    neighbour = FactCard("YK-CRC-031", "t", "x")
+    store = _Store([(neighbour, 0.9)], cards=[target, neighbour])
+    retrieve = make_card_retriever(store, _Embed(), k=3, threshold=0.5)
+    ids = [c.model_id for c in retrieve("YK-CRC-032 的潜伏期？")]
+    assert ids[0] == "YK-CRC-032"  # exact match first
+    assert "YK-CRC-031" in ids  # semantic neighbour still included
+
+
+def test_retriever_failsoft_on_embed_error_keeps_exact():
     class _Boom:
         def embed(self, texts):
             raise RuntimeError("gateway down")
 
-    retrieve = make_card_retriever(_Store([]), _Boom(), k=3, threshold=0.3)
-    assert retrieve("q") == []  # never raises → worker falls back to live engine
+    target = FactCard("CT26", "t", "x")
+    retrieve = make_card_retriever(_Store([], cards=[target]), _Boom(), k=3, threshold=0.3)
+    assert retrieve("无关问题") == []  # no exact hit + embed down → live fallback
+    assert [c.model_id for c in retrieve("CT26 怎么样")] == ["CT26"]  # exact survives embed failure
 
 
 def test_default_retriever_is_noop_without_index():
@@ -74,6 +92,20 @@ def test_build_cards_assembles_desensitized_fact_text():
     assert "u1" not in c.text  # internal uuid never leaks into the card
     assert "Colorectal Carcinoma" in c.title
     assert "潜伏期约 8.0 天" in c.text and "12 个药物" in c.text and "TGI 95.0%" in c.text
+
+
+def test_embed_batched_chunks_calls():
+    from db_agent.vdr.build import _embed_batched
+
+    calls = []
+
+    def embed(texts):
+        calls.append(len(texts))
+        return [[1.0] for _ in texts]
+
+    vecs = _embed_batched(embed, [f"t{i}" for i in range(150)], batch=64)
+    assert len(vecs) == 150  # all embedded, order preserved
+    assert calls == [64, 64, 22]  # chunked, not one giant request
 
 
 def test_card_text_formats_decimal_metrics_to_one_dp():

@@ -39,6 +39,10 @@ class CardStore:
     def has_cards(self) -> bool:
         return self._vectors is not None
 
+    @property
+    def cards(self) -> list[FactCard]:
+        return list(self._cards)
+
     def search(self, query_vec: list[float], k: int) -> list[tuple[FactCard, float]]:
         """Top-k cards by cosine similarity, each with its score (best first)."""
         if self._vectors is None or k <= 0:

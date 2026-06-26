@@ -23,12 +23,23 @@ def make_card_retriever(
     store: CardStore, embed: EmbeddingClient, k: int, threshold: float
 ) -> CardRetriever:
     def retrieve(question: str) -> list[FactCard]:
+        # Exact model_id mentions resolve deterministically — an embedding barely
+        # separates YK-CRC-032 from YK-CRC-031, so a named model must never be lost
+        # to semantic neighbours. These are always surfaced first.
+        ql = question.lower()
+        exact = [c for c in store.cards if c.model_id.lower() in ql]
         try:
-            vec = embed.embed([question])[0]
-            hits = store.search(vec, k)
+            hits = store.search(embed.embed([question])[0], k)
         except Exception:
-            return []  # fail-soft: retrieval is additive; the worker falls back to live
-        return [card for card, score in hits if score >= threshold]
+            return exact  # fail-soft: still return any exact hits; else live fallback
+        semantic = [card for card, score in hits if score >= threshold]
+        seen: set[str] = set()
+        merged: list[FactCard] = []
+        for card in [*exact, *semantic]:
+            if card.model_id not in seen:
+                seen.add(card.model_id)
+                merged.append(card)
+        return merged[: max(k, len(exact))]
 
     return retrieve
 
